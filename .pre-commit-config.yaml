@@ -1,0 +1,53 @@
+# ==============================================================================
+# EcoBite Platform - Pre-commit Git Hook Configuration
+# ==============================================================================
+# How to install:
+#   pip install pre-commit
+#   pre-commit install
+# How to run manually:
+#   pre-commit run --all-files
+# ==============================================================================
+
+repos:
+  # --- Standard Git & Security Hooks ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        name: Block large files (> 5MB, prevent committing .pt weights)
+        args: ['--maxkb=5120']
+      - id: check-yaml
+        name: Validate YAML files
+        exclude: ^(helm/|docker-compose)
+      - id: check-json
+        name: Validate JSON files
+      - id: end-of-file-fixer
+        name: Ensure newline at end of file
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: detect-private-key
+        name: Detect leaked private keys or secrets
+      - id: check-merge-conflict
+        name: Check for unresolved merge conflicts
+
+  # --- Python Backend: Ruff (Lightning Fast Linter & Formatter) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.9
+    hooks:
+      - id: ruff
+        name: Ruff Linter (Backend)
+        files: ^backend/
+        args: [--fix]
+      - id: ruff-format
+        name: Ruff Formatter (Backend)
+        files: ^backend/
+
+  # --- Local Custom Guard: Block .env files ---
+  - repo: local
+    hooks:
+      - id: forbid-env-files
+        name: Forbid committing active .env files
+        entry: 'Directly committing .env or secrets is strictly prohibited. Use .env.example instead.'
+        language: fail
+        files: '^\.env(\.local|\.development|\.production)?$'
+        exclude: '^\.env\.example$'

@@ -33,6 +33,8 @@ EcoBite-Platform/
 ├── .gitignore                          # Cấu hình bỏ qua file nhạy cảm, cache và file trọng số lớn
 ├── .env.example                        # Mẫu biến môi trường chuẩn
 ├── .env                                # Biến môi trường cục bộ đang kích hoạt
+├── .pre-commit-config.yaml             # Chốt chặn Git Hook tự động (Ruff, Secrets, File size)
+├── AGENTS.md                           # Bộ quy tắc & Chu trình phát triển TDD bắt buộc cho AI
 ├── docker-compose.yml                  # Cấu hình Docker cho PostGIS 16 và Redis 7
 ├── README.md                           # Tài liệu tổng quan dự án
 ├── docs/                               # Bộ tài liệu Quản lý Dự án & Kỹ thuật chi tiết
@@ -41,7 +43,8 @@ EcoBite-Platform/
 │   ├── 03_Database_Schema_ERD.md       # Thiết kế CSDL PostgreSQL/PostGIS, ERD Mermaid
 │   ├── 04_API_Specification.md         # Đặc tả chi tiết RESTful API endpoints v1
 │   ├── 05_Agile_Roadmap_and_Kanban.md  # Kế hoạch Sprint (6 Sprints), DoR, DoD & Rủi ro
-│   └── 06_Environment_and_ML_Setup_Guide.md # Cẩm nang cài đặt chi tiết từ A-Z
+│   ├── 06_Environment_and_ML_Setup_Guide.md # Cẩm nang cài đặt chi tiết từ A-Z
+│   └── 07_AI_Development_Workflow_and_Quality_Gates.md # Hướng dẫn chu trình TDD & Hooks
 ├── ml/                                 # Không gian làm việc Machine Learning độc lập
 │   ├── README.md                       # Quy ước đặt tên file .pt & giao tiếp Backend
 │   ├── requirements.txt                # Thư viện phục vụ huấn luyện (Ultralytics, Scikit, Jupyter)
@@ -52,23 +55,29 @@ EcoBite-Platform/
 │   ├── requirements.txt                # Thư viện phục vụ API & Inference (.pt)
 │   ├── alembic.ini                     # Cấu hình Database Migrations
 │   ├── alembic/                        # Thư mục chứa các phiên bản migration
-│   └── app/                            # Mã nguồn ứng dụng (Chưa viết code nghiệp vụ)
-│       ├── core/                       # Cấu hình bảo mật, Settings, Database Session
-│       ├── models/                     # SQLAlchemy ORM Models
-│       ├── schemas/                    # Pydantic Schemas / DTOs
-│       ├── services/                   # Business Logic & Helpers
-│       └── api/v1/endpoints/           # API Route Controllers
+│   ├── app/                            # Mã nguồn ứng dụng (Chưa viết code nghiệp vụ)
+│   │   ├── core/                       # Cấu hình bảo mật, Settings, Database Session
+│   │   ├── models/                     # SQLAlchemy ORM Models
+│   │   ├── schemas/                    # Pydantic Schemas / DTOs
+│   │   ├── services/                   # Business Logic & Helpers
+│   │   └── api/v1/endpoints/           # API Route Controllers
+│   └── tests/                          # Hệ thống kiểm thử tự động Backend
+│       ├── unit/                       # Unit tests logic độc lập
+│       └── integration/                # Integration tests kết nối DB & API
 └── frontend/                           # Giao diện Người dùng (Next.js 14 App Router)
     ├── package.json                    # Khai báo thư viện (Leaflet, QR, TanStack Query)
     ├── .npmrc                          # Cấu hình strict engine
     ├── public/                         # Static assets (icons, illustrations)
-    └── src/
-        ├── app/
-        │   ├── (consumer)/             # Luồng giao diện Người tiêu dùng
-        │   ├── (store-partner)/        # Luồng giao diện Đối tác Cửa hàng (Scanner)
-        │   └── (admin)/                # Luồng giao diện Quản trị viên
-        ├── components/                 # Tái sử dụng UI components
-        └── lib/                        # Axios instance, Map helpers, QR utilities
+    ├── src/
+    │   ├── app/
+    │   │   ├── (consumer)/             # Luồng giao diện Người tiêu dùng
+    │   │   ├── (store-partner)/        # Luồng giao diện Đối tác Cửa hàng (Scanner)
+    │   │   └── (admin)/                # Luồng giao diện Quản trị viên
+    │   ├── components/                 # Tái sử dụng UI components
+    │   └── lib/                        # Axios instance, Map helpers, QR utilities
+    └── __tests__/                      # Hệ thống kiểm thử tự động Frontend
+        ├── components/                 # Test giao diện người dùng
+        └── hooks/                      # Test custom hooks & query logic
 ```
 
 ---
@@ -138,7 +147,9 @@ cd ..
 | 🔌 [`docs/04_API_Specification.md`](docs/04_API_Specification.md) | Tài liệu RESTful API v1 đầy đủ Request/Response schemas, mã lỗi và phân quyền. |
 | 📋 [`docs/05_Agile_Roadmap_and_Kanban.md`](docs/05_Agile_Roadmap_and_Kanban.md) | Phân chia 6 Sprint (12 tuần), Definition of Ready, Definition of Done & Ma trận Rủi ro. |
 | 🛠️ [`docs/06_Environment_and_ML_Setup_Guide.md`](docs/06_Environment_and_ML_Setup_Guide.md) | Cẩm nang cài đặt chi tiết Docker, venv riêng cho Backend và ML, Lifespan code mẫu. |
+| 🛡️ [`docs/07_AI_Development_Workflow_and_Quality_Gates.md`](docs/07_AI_Development_Workflow_and_Quality_Gates.md) | Quy trình kiểm thử TDD, hướng dẫn cài đặt Git Pre-commit Hook & Quality Gates. |
 | 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn đặt tên file `.pt`, metadata format, quy trình export và giao tiếp với Backend. |
+| 📜 [`AGENTS.md`](AGENTS.md) | Bộ quy tắc & chu trình kiểm thử tự động bắt buộc dành cho AI Coding Assistant. |
 
 ---
 
