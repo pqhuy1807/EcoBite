@@ -1,0 +1,30 @@
+# ==============================================================================
+# EcoBite Platform - Machine Learning & Model Training Requirements
+# ==============================================================================
+
+# Deep Learning Core
+torch==2.3.1
+torchvision==0.18.1
+
+# Computer Vision & Object Detection (YOLOv8 for food recognition/quality inspection)
+ultralytics==8.2.35
+
+# Data Science & Machine Learning
+scikit-learn==1.5.0
+pandas==2.2.2
+numpy==1.26.4
+matplotlib==3.9.0
+seaborn==0.13.2
+
+# Image Processing
+pillow==10.3.0
+opencv-python-headless==4.9.0.80
+
+# Interactive Exploration & Experimentation
+jupyterlab==4.2.2
+notebook==7.2.1
+ipywidgets==8.1.3
+
+# Progress & Utilities
+tqdm==4.66.4
+pyyaml==6.0.1

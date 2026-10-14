@@ -1,0 +1,52 @@
+name: ecobite-platform
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: ecobite_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ecobite_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ecobite_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ecobite_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecobite_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - ecobite_network
+
+volumes:
+  postgres_data:
+    name: ecobite_postgres_data
+  redis_data:
+    name: ecobite_redis_data
+
+networks:
+  ecobite_network:
+    name: ecobite_network
+    driver: bridge
