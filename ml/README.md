@@ -75,7 +75,7 @@ ML_FALLBACK_TO_MOCK=True        # Nếu chưa có file .pt, backend tự chuyể
 - **FastAPI Lifespan Context Manager**:
   1. Khi ứng dụng FastAPI khởi động (`startup`), service đọc file cấu hình, xác định thiết bị tính toán (`device`), và nạp model vào bộ nhớ RAM/VRAM một lần duy nhất.
   2. Instance mô hình được lưu vào `app.state.ml_model` hoặc thông qua một class Singleton `MLModelService`.
-  3. Khi có request kiểm tra hình ảnh từ Store Partner (ví dụ lúc đăng gói thức ăn cứu trợ), controller gọi method `predict()` của instance đã có sẵn trong memory.
+  3. Khi có request kiểm tra hình ảnh từ Store Partner (ví dụ lúc đăng món ăn cứu trợ), controller gọi method `predict()` của instance đã có sẵn trong memory.
   4. Khi ứng dụng tắt (`shutdown`), giải phóng bộ nhớ (CUDA cache / memory cleanup).
 
 ```text
@@ -132,3 +132,21 @@ Sau khi hoàn tất training notebook, lưu checkpoint hoặc export file `.pt` 
 model.save("../weights/food_quality_yolov8.pt")
 ```
 Sau đó khởi động Backend để kiểm tra tính tương thích và độ trễ phản hồi (latency).
+
+---
+
+## 5. Tích hợp AI Ngôn ngữ Tự nhiên & Đa phương thức (Google Gemini 2.5 Flash GenAI Service)
+
+Bên cạnh mô hình thị giác máy tính cục bộ trong `ml/weights/*.pt`:
+- **Nhiệm vụ AI Suite**:
+  1. **Trợ lý Đăng món Siêu tốc & Rà soát Dị ứng 2 Tầng (Batch Quick-Post NLP & Allergen Guard)**:
+     - **Native Audio Multimodal**: Lắng nghe trực tiếp file ghi âm của chủ quán, không qua STT trung gian, nhận diện chính xác tiếng lóng và món ăn Việt.
+     - **Menu-Catalog Grounding**: So khớp ngữ nghĩa với Thực đơn gốc (`menu_items`) để tự động kéo Ảnh món ăn chất lượng cao, Giá gốc và kích hoạt Luật giảm giá theo thời gian; hỗ trợ `override_discounted_price` khi quán đọc giá xả cố định.
+     - **2-Tier Allergen Guard**: Kết hợp khai báo trực tiếp (`EXPLICIT`) và AI suy luận tri thức ẩm thực Việt (`INFERRED`: trứng trong chả, cá trong nước mắm, đậu phộng trong mỡ hành...) theo 14 chuẩn EU FIC, đồng thời phân tách nhãn khẩu vị địa phương `dietary_notes` (hành/ngò Allium, đồ cay, đồ chua, ăn chay).
+     - **Batch Extraction Schema**: Trích xuất nhiều món cùng lúc trong một lần nói (`QuickPostExtractionResponse` với `List[SurplusDishItem]`).
+     - **Relative Time Resolution**: Tự động quy đổi giờ tương đối ("từ giờ đến 3h chiều") thành giờ tuyệt đối ISO 8601 dựa trên `current_server_time`.
+  2. **Hệ thống Gợi ý Món ăn Thông minh (AI Smart Recommendation Engine)**:
+     - Kết hợp lọc cứng PostGIS (khoảng cách 1-3km, loại trừ chất dị ứng ở tầng SQL) và Gemini 2.5 Flash sinh lý do gợi ý cá nhân hóa (`ai_justification`, 20-30 từ).
+- **Mô hình triển khai**: **`gemini-2.5-flash`** thông qua Google GenAI SDK (`google-genai`) với gói Free Tier từ Google AI Studio.
+- **Vị trí Service**: Được tổ chức gọn nhẹ trong `backend/app/services/nlp_service.py` và `backend/app/services/recommendation_service.py`.
+- **Ràng buộc Schema**: Bắt buộc tuân thủ schema Pydantic `QuickPostExtractionResponse` với tính năng Native Structured Output của Gemini 2.5 Flash.

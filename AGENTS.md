@@ -1,6 +1,6 @@
 # EcoBite Platform - AI Pair Programming Rules & Quality Workflow
 
-> **Áp dụng cho**: Tất cả các AI Coding Agents (Antigravity, Cursor, Copilot, Claude Code) khi làm việc trên repository này.  
+> **Áp dụng cho**: Tất cả các AI Coding Agents (Antigravity, Cursor, Copilot, Claude Code) khi làm việc trên repository này.
 > **Nguyên tắc cốt lõi**: "AI proposes, Toolchain validates, Tests pass before commit".
 
 ---
@@ -67,13 +67,16 @@ npm run type-check
 
 ---
 
-## 2. 5 Ranh giới Bất khả Xâm phạm (Inviolable Guardrails)
+## 2. 8 Ranh giới Bất khả Xâm phạm (Inviolable Guardrails)
 
 1. ❌ **CẤM COMMIT SECRETS**: Tuyệt đối không đọc, ghi hoặc commit file `.env`, token, key bảo mật vào git staging. Luôn sử dụng biến môi trường qua `pydantic-settings`.
 2. ❌ **CẤM HARDCODE TOẠ ĐỘ & QUYỀN**: Mọi logic vị trí địa lý phải thông qua hàm PostGIS `ST_DWithin` hoặc `ST_Distance`. Mọi API nhạy cảm phải bọc Dependency phân quyền `require_roles(...)`.
 3. ❌ **BẢO MẬT MÃ QR**: Mã QR xác nhận đơn hàng phải dùng thuật toán HMAC-SHA256, có thời hạn hiệu lực (`expires_at`), và phải kiểm tra cờ `is_used` để chống Replay Attack (quét 2 lần).
-4. ❌ **CHỐNG OVER-SELLING (TRANH CHẤP TỒN KHO)**: Khi trừ số lượng gói thức ăn `remaining_quantity`, bắt buộc sử dụng DB Transaction với Atomic Update (`WHERE remaining_quantity >= :qty`) hoặc Redis Distributed Lock.
-5. ❌ **DECOUPLED ML**: Không cài đặt các thư viện đào tạo nặng (`ultralytics`, `jupyterlab`, `matplotlib`) vào `backend/requirements.txt`. Backend chỉ phục vụ suy luận (`torch` runtime).
+4. ❌ **CHỐNG OVER-SELLING (TRANH CHẤP TỒN KHO MÓN ĂN)**: Khi trừ số lượng món ăn `remaining_quantity` trong bảng `dishes`, bắt buộc sử dụng DB Transaction với Atomic Update (`WHERE remaining_quantity >= :qty`) hoặc Redis Distributed Lock.
+5. ❌ **GIẢM GIÁ THEO KHUNG GIỜ LÀ RULE-BASED**: Tuyệt đối không dùng mô hình AI phỏng đoán giá gây bất định. Luôn tính giá theo luật thời gian xác định (Rule-based: giờ vàng giảm 40-50%, giờ chót giảm 70%).
+6. ❌ **AI GENAI BẢO MẬT & CẤU TRÚC (MENU GROUNDING & 2-TIER ALLERGENS)**: Khi gọi Google Gemini 2.5 Flash, bắt buộc sử dụng Pydantic Schema Structured Output (`QuickPostExtractionResponse`). Rà soát dị ứng bắt buộc chia rõ 2 nguồn: `EXPLICIT` (chủ quán đọc trực tiếp) và `INFERRED` (AI suy luận tri thức món Việt theo 14 chuẩn EU FIC). Bắt buộc đối chiếu Thực đơn gốc (`menu_items`) để kế thừa ảnh và giá gốc chuẩn xác.
+7. ❌ **AN TOÀN DỊ ỨNG TRONG GỢI Ý MÓN ĂN (ALLERGEN HARD INVARIANT)**: Khi chạy engine gợi ý món (`RecommendationService`), bộ lọc loại trừ dị ứng (`excluded_allergens`) bắt buộc thực thi ở tầng Database SQL (Hard Filter). Gemini 2.5 Flash chỉ nhận dữ liệu đã lọc sạch dị ứng để sinh lời bình (`ai_justification`), tuyệt đối không phó thác an toàn sức khỏe cho AI phỏng đoán.
+8. ❌ **DECOUPLED ML**: Không cài đặt các thư viện đào tạo nặng (`ultralytics`, `jupyterlab`, `matplotlib`) vào `backend/requirements.txt`. Backend chỉ phục vụ suy luận (`torch` runtime và `google-genai` SDK).
 
 ---
 

@@ -5,33 +5,47 @@
 [![Frontend: Next.js 14](https://img.shields.io/badge/Frontend-Next.js_14-black.svg?logo=next.js)]()
 [![Database: PostGIS 16](https://img.shields.io/badge/Database-PostgreSQL_16_+_PostGIS_3.4-336791.svg?logo=postgresql)]()
 [![Cache: Redis 7](https://img.shields.io/badge/Cache-Redis_7-DC382D.svg?logo=redis)]()
-[![ML: PyTorch / YOLOv8](https://img.shields.io/badge/AI%2FML-PyTorch_+_YOLOv8-EE4C2C.svg?logo=pytorch)]()
+[![AI: Google Gemini 2.5 Flash](https://img.shields.io/badge/AI%2FNLP-Gemini_2.5_Flash-4285F4.svg?logo=google)]()
+[![ML: PyTorch](https://img.shields.io/badge/AI%2FML-PyTorch-EE4C2C.svg?logo=pytorch)]()
 
-**EcoBite** là nền tảng công nghệ kết nối trực tiếp các cơ sở kinh doanh ăn uống (tiệm bánh, nhà hàng, quán ăn, siêu thị) với người tiêu dùng có nhu cầu mua thực phẩm cận giờ đóng cửa dưới dạng **Gói Thức ăn Bất ngờ (Surprise Bags)** với mức giá giảm sâu từ 50% - 80%. Dự án hướng tới sứ mệnh giảm lãng phí thực phẩm, cắt giảm phát thải khí nhà kính ($CO_2$) và lan toả phong cách sống xanh bền vững.
+**EcoBite** là nền tảng công nghệ kết nối trực tiếp các cơ sở kinh doanh ăn uống (tiệm bánh, nhà hàng, quán ăn, siêu thị) với người tiêu dùng có nhu cầu mua **các món ăn dư thừa trong ngày (Surplus Food Dishes)** với mức giá giải cứu giảm sâu từ 40% - 70%. Dự án hướng tới sứ mệnh giảm lãng phí thực phẩm, cắt giảm phát thải khí nhà kính ($CO_2$) và lan toả phong cách sống xanh bền vững.
 
 ---
 
-## 📌 8 Tính năng Cốt lõi (Core Capabilities)
+## 📌 Nhóm Tính năng Nền tảng & Vận hành O2O (Core Platform)
 
-1. **Xác thực & Quản trị Duyệt Quán (Auth & Partner KYC)**: Đăng ký đa vai trò (Consumer, Store Partner, Admin), xác thực JWT Dual-Token, quy trình duyệt giấy phép vệ sinh an toàn thực phẩm.
-2. **Đăng Gói thức ăn Ngẫu nhiên & Giảm giá theo Khung giờ (Surprise Bags & Dynamic Pricing)**: Cho phép cửa hàng tạo gói thức ăn bất ngờ kèm cơ chế tự động hạ giá lũy tiến trong 30-45 phút cuối của khung giờ lấy hàng.
-3. **Tìm kiếm Theo Vị trí Địa lý (Geo-Spatial Search)**: Tích hợp PostGIS `ST_DWithin` và GIST Spatial Index giúp người mua tìm quán gần nhất trong bán kính 1km - 10km trên bản đồ tương tác Leaflet.
-4. **Đặt hàng Sinh Mã QR Bảo mật Động (Order & Dynamic QR Token)**: Cơ chế khóa tồn kho chống over-selling, mã QR chứa chữ ký HMAC-SHA256 có hạn sử dụng và chống chụp màn hình gian lận.
-5. **Quét Mã QR Xác nhận Giao hàng tại Quán (QR Scanner Verification)**: Tích hợp camera web scanner (`html5-qrcode`) để chủ quán quét mã QR của khách khi nhận hàng, hoàn tất đơn tức thì.
-6. **Đánh giá 1-5 Sao & Nhận xét Chất lượng (Verified Reviews)**: Đánh giá dành riêng cho người đã hoàn thành nhận đơn, kèm ảnh chụp thực tế và gắn tag nhanh.
-7. **Hệ thống Thông báo Thời gian thực (Real-time Notifications)**: Cập nhật trạng thái đơn hàng và gửi cảnh báo mở bán gói thức ăn giảm sâu qua Redis Pub/Sub và WebSocket.
-8. **Tích Điểm Xanh & Đo lường Giảm Phát thải CO2 (Green Points & CO2 Tracker)**: Tự động tính toán lượng $CO_2$ tiết kiệm được (1kg thức ăn $\approx$ 2.5kg $CO_2e$), tích luỹ Điểm Xanh đổi mã giảm giá voucher.
+1. **Xác thực & Quản trị Duyệt Quán (Auth & Partner KYC)**: Đăng ký đa vai trò (`CONSUMER`, `STORE_PARTNER`, `ADMIN`), xác thực JWT Dual-Token, quy trình kiểm duyệt giấy phép vệ sinh an toàn thực phẩm.
+2. **Quản lý Món ăn & Giảm giá theo Khung giờ Rule-based (Dish Management & Rule-based Discounting)**: Đăng từng món ăn cụ thể còn dư trong ngày. Cài đặt luật giảm giá theo khung giờ (ví dụ: giờ vàng giảm 40%-50%; 30-45 phút cuối trước giờ đóng cửa tự động áp dụng luật hạ giá sâu 70% để xả sạch thực phẩm).
+3. **Tìm kiếm Theo Vị trí Địa lý (Geo-Spatial Search)**: Tích hợp PostGIS `ST_DWithin` và GIST Spatial Index giúp người mua tìm các quán và món ăn đang giảm giá gần nhất trong bán kính 1km - 10km trên bản đồ tương tác Leaflet.
+4. **Đặt hàng & Khóa Tồn kho Chống Bán Vượt (Inventory Atomic Lock)**: Cơ chế Transaction/Redis Lock bảo đảm tính toàn vẹn tồn kho khi nhiều người cùng đặt món cuối cùng.
+5. **Sinh Mã QR Bảo mật Động (Dynamic HMAC QR Token)**: Mã QR chứa chữ ký HMAC-SHA256 theo đơn hàng và khung giờ lấy món, chống chụp màn hình chia sẻ bừa bãi.
+6. **Quét Mã QR Xác nhận Giao hàng tại Quán (QR Scanner Verification)**: Tích hợp camera web scanner (`html5-qrcode`) để chủ quán quét mã QR của khách khi nhận món, đổi trạng thái sang `COMPLETED`, chống Replay Attack (quét 2 lần).
+7. **Đánh giá Món ăn Thực tế (Verified Dish Reviews)**: Đánh giá 1-5 sao dành riêng cho người đã nhận món thành công, kèm ảnh chụp thực tế và gắn tag nhanh.
+8. **Tích Điểm Xanh & Đo lường Giảm Phát thải CO2 (Green Points & CO2 Tracker)**: Tự động tính toán lượng $CO_2$ tiết kiệm được (1 suất ăn $\approx$ 2.5kg $CO_2e$), tích luỹ Điểm Xanh đổi mã giảm giá voucher.
+
+---
+
+## 🤖 Nhóm Tính năng Trí Tuệ Nhân Tạo (AI Intelligence Suite - Powered by Google Gemini 2.5 Flash)
+
+1. **Trợ lý AI Đăng Món Siêu Tốc & Rà Soát Dị Ứng 2 Tầng (Batch Quick-Post NLP & Allergen Guard)**:
+   - *Menu-Catalog Grounding*: So khớp ngữ nghĩa với Thực đơn gốc (`menu_items`) của quán để tự động kéo Ảnh món ăn chất lượng cao, Giá gốc và kích hoạt Luật giảm giá theo thời gian; hỗ trợ ghi đè giá (`override_discounted_price`) nếu chủ quán đọc giá xả cố định.
+   - *Suy luận Dị ứng 2 Tầng (2-Tier Allergen Guard)*: Tách bạch rõ `EXPLICIT` (chủ quán đọc) và `INFERRED` (AI suy luận tri thức ẩm thực Việt: trứng trong chả, cá trong nước mắm, đậu phộng trong mỡ hành...) theo chuẩn 14 chất dị ứng quốc tế EU FIC; bổ sung nhãn khẩu vị địa phương `dietary_notes` (hành/ngò Allium, đồ cay, đồ chua, ăn chay).
+   - *Trích xuất Hàng loạt (Batch Extraction)*: Cho phép chủ quán thu âm một mạch nhiều món dư cuối ca (`List[SurplusDishItem]`) và áp dụng chung khung giờ chỉ trong 1 lần nói.
+   - *Xử lý Thời gian Tương đối (Relative Time)*: Tiếp nhận `current_server_time` để tự động tính toán giờ bắt đầu và kết thúc nhận món tuyệt đối từ câu nói tương đối (*"bán từ giờ đến 3h chiều"* $\rightarrow$ `13:55:00` - `15:00:00`).
+   - *Native Multimodal Audio*: Gửi trực tiếp file ghi âm ngắn sang Gemini 2.5 Flash kèm ngữ cảnh thực đơn, nhận diện chính xác tiếng lóng ẩm thực Việt Nam (*"bốn lăm cành"*, *"bì chả"*) mà không phụ thuộc vào STT trung gian dễ sai lệch.
+2. **Hệ thống Gợi ý Món ăn Thông minh Cá nhân hóa (AI Smart Food Recommendation Engine)**:
+   - *Context-Aware Matching*: Tự động đề xuất các món ăn ngon gần vị trí hiện tại (1km - 3km) phù hợp với thời điểm trong ngày (bữa trưa/bữa tối) và ưu tiên các món đang bước vào khung giờ chót xả hàng gấp (Urgent Rescue Deals).
+   - *Sở thích & Chế độ ăn*: Học từ lịch sử đặt món, ngân sách trung bình và tự động loại trừ các món có thành phần dị ứng của khách hàng (Hard Filter ở tầng SQL).
+   - *AI Justification Generator*: Gemini 2.5 Flash sinh ra lời giải thích tự nhiên thuyết phục cho từng gợi ý (*"Món này gợi ý cho bạn vì bạn thích món bún vào bữa trưa và quán cách bạn chỉ 300m đang có deal giảm 50% chỉ còn 25k!"*).
 
 ---
 
 ## 🏗️ Cấu trúc Cây Thư mục Dự án
 
-Cấu trúc dự án được phân tách rành mạch (Decoupled Architecture), đặc biệt thư mục `ml/` nằm hoàn toàn độc lập bên ngoài `backend/`:
-
 ```text
 EcoBite-Platform/
 ├── .gitignore                          # Cấu hình bỏ qua file nhạy cảm, cache và file trọng số lớn
-├── .env.example                        # Mẫu biến môi trường chuẩn
+├── .env.example                        # Mẫu biến môi trường chuẩn (Postgres, Redis, Gemini API)
 ├── .env                                # Biến môi trường cục bộ đang kích hoạt
 ├── .pre-commit-config.yaml             # Chốt chặn Git Hook tự động (Ruff, Secrets, File size)
 ├── AGENTS.md                           # Bộ quy tắc & Chu trình phát triển TDD bắt buộc cho AI
@@ -39,31 +53,31 @@ EcoBite-Platform/
 ├── README.md                           # Tài liệu tổng quan dự án
 ├── docs/                               # Bộ tài liệu Quản lý Dự án & Kỹ thuật chi tiết
 │   ├── 01_PRD_and_User_Stories.md      # Đặc tả yêu cầu sản phẩm & 8 User Stories
-│   ├── 02_System_Architecture.md       # Thiết kế kiến trúc, Sequence Diagrams & Lifespan
-│   ├── 03_Database_Schema_ERD.md       # Thiết kế CSDL PostgreSQL/PostGIS, ERD Mermaid
-│   ├── 04_API_Specification.md         # Đặc tả chi tiết RESTful API endpoints v1
+│   ├── 02_System_Architecture.md       # Thiết kế kiến trúc, Sequence Diagrams, Gemini NLP & Lifespan
+│   ├── 03_Database_Schema_ERD.md       # Thiết kế CSDL PostgreSQL/PostGIS (bảng dishes, orders...), ERD Mermaid
+│   ├── 04_API_Specification.md         # Đặc tả chi tiết RESTful API v1 (/dishes, /ml/parse-dish-nlp...)
 │   ├── 05_Agile_Roadmap_and_Kanban.md  # Kế hoạch Sprint (6 Sprints), DoR, DoD & Rủi ro
-│   ├── 06_Environment_and_ML_Setup_Guide.md # Cẩm nang cài đặt chi tiết từ A-Z
+│   ├── 06_Environment_and_ML_Setup_Guide.md # Cẩm nang cài đặt chi tiết (Docker, venv, Gemini API Key)
 │   └── 07_AI_Development_Workflow_and_Quality_Gates.md # Hướng dẫn chu trình TDD & Hooks
 ├── ml/                                 # Không gian làm việc Machine Learning độc lập
-│   ├── README.md                       # Quy ước đặt tên file .pt & giao tiếp Backend
+│   ├── README.md                       # Quy chuẩn ML/NLP & giao tiếp Backend
 │   ├── requirements.txt                # Thư viện phục vụ huấn luyện (Ultralytics, Scikit, Jupyter)
-│   ├── notebooks/                      # Jupyter Notebooks nghiên cứu & huấn luyện mô hình
-│   ├── datasets/                       # Dữ liệu ảnh thực phẩm & nhãn dán (đã gitignore)
-│   └── weights/                        # Lưu trữ file trọng số .pt để Backend nạp khi chạy
+│   ├── notebooks/                      # Jupyter Notebooks nghiên cứu & thử nghiệm mô hình
+│   ├── datasets/                       # Dữ liệu ảnh & văn bản thực phẩm (đã gitignore)
+│   └── weights/                        # Lưu trữ file trọng số (.pt) nạp khi chạy
 ├── backend/                            # Ứng dụng Backend Web API (Python FastAPI)
-│   ├── requirements.txt                # Thư viện phục vụ API & Inference (.pt)
+│   ├── requirements.txt                # Thư viện phục vụ API, Gemini SDK & PyTorch runtime
 │   ├── alembic.ini                     # Cấu hình Database Migrations
 │   ├── alembic/                        # Thư mục chứa các phiên bản migration
-│   ├── app/                            # Mã nguồn ứng dụng (Chưa viết code nghiệp vụ)
+│   ├── app/                            # Mã nguồn ứng dụng
 │   │   ├── core/                       # Cấu hình bảo mật, Settings, Database Session
-│   │   ├── models/                     # SQLAlchemy ORM Models
+│   │   ├── models/                     # SQLAlchemy ORM Models (Dish, Order, User...)
 │   │   ├── schemas/                    # Pydantic Schemas / DTOs
-│   │   ├── services/                   # Business Logic & Helpers
+│   │   ├── services/                   # Business Logic, NLP Service & Helpers
 │   │   └── api/v1/endpoints/           # API Route Controllers
 │   └── tests/                          # Hệ thống kiểm thử tự động Backend
-│       ├── unit/                       # Unit tests logic độc lập
-│       └── integration/                # Integration tests kết nối DB & API
+│       ├── unit/                       # Unit tests logic độc lập (NLP parser, rule discount, QR HMAC)
+│       └── integration/                # Integration tests kết nối DB PostGIS & API
 └── frontend/                           # Giao diện Người dùng (Next.js 14 App Router)
     ├── package.json                    # Khai báo thư viện (Leaflet, QR, TanStack Query)
     ├── .npmrc                          # Cấu hình strict engine
@@ -71,7 +85,7 @@ EcoBite-Platform/
     ├── src/
     │   ├── app/
     │   │   ├── (consumer)/             # Luồng giao diện Người tiêu dùng
-    │   │   ├── (store-partner)/        # Luồng giao diện Đối tác Cửa hàng (Scanner)
+    │   │   ├── (store-partner)/        # Luồng giao diện Đối tác (Quick-Post AI, Scanner)
     │   │   └── (admin)/                # Luồng giao diện Quản trị viên
     │   ├── components/                 # Tái sử dụng UI components
     │   └── lib/                        # Axios instance, Map helpers, QR utilities
@@ -93,27 +107,22 @@ docker compose up -d
 docker compose ps
 ```
 
-### 2. Thiết lập Backend (FastAPI)
+### 2. Thiết lập Biến môi trường (.env)
 ```bash
-cd backend
-python3 -m venv venv_backend
-source venv_backend/bin/activate
-pip install -r requirements.txt
-# (Tùy chọn) Chạy server khi đã có code main:
-# uvicorn app.main:app --reload --port 8000
-deactivate
-cd ..
+cp .env.example .env
+# Mở file .env và điền GEMINI_API_KEY (lấy miễn phí từ Google AI Studio với tài khoản Google AI Pro)
 ```
 
-### 3. Thiết lập Machine Learning Subsystem (Huấn luyện Mô hình)
+### 3. Thiết lập Backend (FastAPI)
 ```bash
-cd ml
-python3 -m venv venv_ml
-source venv_ml/bin/activate
+cd backend
+# Tạo và kích hoạt môi trường ảo Python 3.11
+conda activate ecobite_backend
+# hoặc: python3 -m venv venv_backend && source venv_backend/bin/activate
+
 pip install -r requirements.txt
-# Khởi chạy JupyterLab để làm việc với Notebooks
-# jupyter lab --notebook-dir=notebooks
-deactivate
+# Khởi chạy server:
+# uvicorn app.main:app --reload --port 8000
 cd ..
 ```
 
@@ -121,19 +130,23 @@ cd ..
 ```bash
 cd frontend
 npm install
-# Khởi chạy Next.js development server
+# Khởi chạy Next.js development server:
 # npm run dev
 cd ..
 ```
 
 ---
 
-## 🧠 Cơ chế Kết nối Model ML (`ml/weights/*.pt`) với Backend
+## 🤖 Động cơ AI NLP (Google Gemini 2.5 Flash Free Tier)
 
-1. **Tách biệt Môi trường**: `ml/` chứa bộ công cụ training nặng (`ultralytics`, `jupyterlab`), trong khi `backend/` chỉ cài đặt `torch` runtime gọn nhẹ.
-2. **Cấu hình Đường dẫn**: File `.env` chứa biến `ML_WEIGHTS_DIR=../ml/weights` và `ML_MODEL_FILENAME=food_quality_yolov8.pt`.
-3. **Lifespan Singleton Pattern**: File trọng số `.pt` được nạp vào RAM/VRAM **đúng một lần duy nhất** khi ứng dụng FastAPI khởi động (`lifespan startup`), lưu trữ tại `app.state.ml_model`. Mọi request suy luận chỉ việc gọi hàm dự đoán từ instance đã có sẵn trong bộ nhớ, loại bỏ hoàn toàn độ trễ đọc đĩa (Disk I/O bottleneck).
-4. **Dev Fallback Mode**: Khi chưa có file `.pt` thực tế, hệ thống tự động kích hoạt chế độ Mock Inference (`ML_FALLBACK_TO_MOCK=True`) để không chặn luồng phát triển của Frontend và Mobile.
+1. **Model Phù hợp**: Sử dụng model **`gemini-2.5-flash`** thông qua Google GenAI SDK chính thức (`google-genai`).
+2. **Tận dụng Gói Miễn phí (Free Tier)**:
+   - Tài khoản Google AI Pro / Google AI Studio cung cấp hạn ngạch miễn phí cực lớn (15 RPM, 1M TPM, 1,500 RPD hoàn toàn miễn phí), đủ chạy cho toàn bộ quá trình phát triển, kiểm thử và bảo vệ đồ án.
+3. **Tính năng Structured Output**: Áp dụng cơ chế Pydantic Schema Enforcement để đảm bảo mô hình trả về dữ liệu JSON có cấu trúc chính xác 100%, không bị văng lỗi định dạng văn bản.
+4. **Quy tắc Giảm giá theo Khung giờ (Rule-based Time-based Discounting)**:
+   - Thay vì dùng mô hình AI phỏng đoán giá gây bất định và khó giải trình, hệ thống dùng **luật thời gian tường minh (Deterministic Rule-based Logic)**:
+     - Giá giải cứu (`rescue_price`): Giảm 40% - 50% trong suốt khung giờ mở bán.
+     - Giá giờ chót (`rule_discount_price`): Tự động giảm 70% trong 30-45 phút cuối trước giờ đóng cửa để xả hết thực phẩm.
 
 ---
 
@@ -141,19 +154,12 @@ cd ..
 
 | Tài liệu | Mô tả nội dung chính |
 | :--- | :--- |
-| 📄 [`docs/01_PRD_and_User_Stories.md`](docs/01_PRD_and_User_Stories.md) | Mục tiêu sản phẩm, phân tích Persona, đặc tả 8 tính năng cốt lõi & User Stories. |
-| 🏗️ [`docs/02_System_Architecture.md`](docs/02_System_Architecture.md) | Sơ đồ kiến trúc Clean Architecture, luồng dữ liệu Geo-Search, QR HMAC & ML Lifespan. |
-| 🗄️ [`docs/03_Database_Schema_ERD.md`](docs/03_Database_Schema_ERD.md) | Thiết kế CSDL PostgreSQL/PostGIS, sơ đồ Mermaid ERD, các bảng và chiến lược GIST Index. |
-| 🔌 [`docs/04_API_Specification.md`](docs/04_API_Specification.md) | Tài liệu RESTful API v1 đầy đủ Request/Response schemas, mã lỗi và phân quyền. |
+| 📄 [`docs/01_PRD_and_User_Stories.md`](docs/01_PRD_and_User_Stories.md) | Mục tiêu sản phẩm, Persona, đặc tả 9 tính năng cốt lõi (Món ăn thông thường + AI NLP) & User Stories. |
+| 🏗️ [`docs/02_System_Architecture.md`](docs/02_System_Architecture.md) | Sơ đồ kiến trúc Clean Architecture, luồng dữ liệu Geo-Search, QR HMAC, Gemini NLP Pipeline. |
+| 🗄️ [`docs/03_Database_Schema_ERD.md`](docs/03_Database_Schema_ERD.md) | Thiết kế CSDL PostgreSQL/PostGIS (bảng `dishes`, `orders`), Mermaid ERD và chiến lược GIST Index. |
+| 🔌 [`docs/04_API_Specification.md`](docs/04_API_Specification.md) | Tài liệu RESTful API v1 đầy đủ Request/Response schemas (`/dishes`, `/ml/parse-dish-nlp`). |
 | 📋 [`docs/05_Agile_Roadmap_and_Kanban.md`](docs/05_Agile_Roadmap_and_Kanban.md) | Phân chia 6 Sprint (12 tuần), Definition of Ready, Definition of Done & Ma trận Rủi ro. |
-| 🛠️ [`docs/06_Environment_and_ML_Setup_Guide.md`](docs/06_Environment_and_ML_Setup_Guide.md) | Cẩm nang cài đặt chi tiết Docker, venv riêng cho Backend và ML, Lifespan code mẫu. |
+| 🛠️ [`docs/06_Environment_and_ML_Setup_Guide.md`](docs/06_Environment_and_ML_Setup_Guide.md) | Cẩm nang cài đặt chi tiết Docker, venv, cấu hình Gemini API Key và code mẫu NLP Parser. |
 | 🛡️ [`docs/07_AI_Development_Workflow_and_Quality_Gates.md`](docs/07_AI_Development_Workflow_and_Quality_Gates.md) | Quy trình kiểm thử TDD, hướng dẫn cài đặt Git Pre-commit Hook & Quality Gates. |
-| 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn đặt tên file `.pt`, metadata format, quy trình export và giao tiếp với Backend. |
+| 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn ML/NLP, cấu trúc metadata format và hướng dẫn Backend gọi model inference. |
 | 📜 [`AGENTS.md`](AGENTS.md) | Bộ quy tắc & chu trình kiểm thử tự động bắt buộc dành cho AI Coding Assistant. |
-
----
-
-## 👥 Nhóm Thực hiện & Nguyên tắc Phát triển (Principles)
-- **Zero Business Code at Scaffolding Stage**: Tuyệt đối giữ các thư mục `app/` và `src/` sạch sẽ với các file `.gitkeep` trước khi bắt đầu Sprint 1.
-- **Strict Environment Isolation**: Giữ môi trường ảo `backend/venv_backend` và `ml/venv_ml` độc lập 100%.
-- **Security First**: Không commit secrets lên Git, luôn sử dụng HMAC-SHA256 cho mã QR động và mã hóa bcrypt cho mật khẩu.
