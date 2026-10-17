@@ -163,3 +163,13 @@ cd ..
 | 🛡️ [`docs/07_AI_Development_Workflow_and_Quality_Gates.md`](docs/07_AI_Development_Workflow_and_Quality_Gates.md) | Quy trình kiểm thử TDD, hướng dẫn cài đặt Git Pre-commit Hook & Quality Gates. |
 | 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn ML/NLP, cấu trúc metadata format và hướng dẫn Backend gọi model inference. |
 | 📜 [`AGENTS.md`](AGENTS.md) | Bộ quy tắc & chu trình kiểm thử tự động bắt buộc dành cho AI Coding Assistant. |
+
+## Hướng dẫn cài đặt Backend
+
+1. **Khởi tạo môi trường ảo Python:**
+   ```bash
+   python -m venv venv
+
+   .\venv\Scripts\activate
+
+   pip install -r backend/requirements.txt
