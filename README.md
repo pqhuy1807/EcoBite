@@ -1,5 +1,40 @@
 # 🌱 EcoBite Platform - Food Rescue & Zero-Waste Platform
 
+---
+
+## 👥 Thành viên Thực hiện (Group 05 - FIT HCMUS)
+
+| MSSV | Họ và tên | Vai trò chính trong dự án | Email FIT |
+| :--- | :--- | :--- | :--- |
+
+| **24127402** | **Phùng Quốc Huy** | **AI & Data Lead** | `pqhuy2425@clc.fitus.edu.vn` |
+| 24127561 | Đàng Thế Tony | QA/Tester Lead & Backend | `dttony2424@clc.fitus.edu.vn` |
+| 24127246 | Võ Ngọc Thịnh | Frontend Lead | `vnthinh2418@clc.fitus.edu.vn` |
+| 24127495 | Đặng Trọng Phúc | Backend Lead & AI Engineer | `dtphuc2418@clc.fitus.edu.vn` |
+
+---
+
+## 🎯 Đối tượng Sử dụng & Môi trường Vận hành
+
+### 1. Đối tượng người dùng (Target Users)
+- **Consumers (Người giải cứu thực phẩm)**: Sinh viên, nhân viên văn phòng tìm kiếm các bữa ăn chất lượng hợp vệ sinh với giá ưu đãi (giảm 40% - 70%) và có ý thức giảm thiểu lãng phí thực phẩm đô thị.
+- **Store Partners (Đối tác Cửa hàng)**: Tiệm bánh, nhà hàng, quán cà phê, siêu thị muốn tối ưu hoá chi phí nguyên liệu và thu hồi doanh thu từ món ăn dư thừa cuối ca.
+- **System Administrators (Quản trị viên)**: Đội ngũ vận hành chịu trách nhiệm xác minh chứng nhận An toàn Vệ sinh Thực phẩm (ATVSTP), duyệt cửa hàng và giám sát chỉ số môi trường.
+
+### 2. Môi trường vận hành (Target Environments)
+- **Client Application**: Progressive Web App (PWA) đa nền tảng xây dựng bằng Next.js 14 App Router, Tailwind CSS, tương thích di động và máy tính.
+- **Backend Infrastructure**: FastAPI (Python 3.11), PostgreSQL 16 + PostGIS (truy vấn không gian địa lý), Redis 7 (lưu cache & khoá chống bán vượt tồn kho) và Google GenAI SDK (Gemini 2.5 Flash).
+
+---
+
+## 💡 Điểm Khác Bật Cốt Lõi của EcoBite
+
+Khác với các nền tảng phương Tây như *Too Good To Go* hay *Yindii* (sử dụng "Túi mù" / Mystery Bags):
+1. **Minh bạch 100% từng món ăn (No Mystery Bags)**: Hiển thị rõ tên món, hình ảnh chân thực, thành phần và cảnh báo dị ứng 2 tầng theo chuẩn 14 chất dị ứng EU FIC.
+2. **Giảm giá theo khung giờ tất định (Rule-Based Time-Shift Discounting)**: Tự động hạ giá minh bạch (giảm 40%-50% giờ giải cứu tiêu chuẩn, giảm tới 70% trong 30-45 phút cuối trước khi đóng cửa).
+3. **Đăng món siêu tốc bằng AI giọng nói**: Tận dụng Google Gemini 2.5 Flash nhận diện tiếng lóng ẩm thực Việt Nam (*"bốn lăm cành"*, *"bì chả"*), bóc tách danh mục món và rà soát dị ứng chỉ trong 3 giây.
+
+
 [![Architecture: Decoupled Three-Tier](https://img.shields.io/badge/Architecture-Decoupled_Three--Tier-00C781.svg)]()
 [![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI_0.111-009688.svg?logo=fastapi)]()
 [![Frontend: Next.js 14](https://img.shields.io/badge/Frontend-Next.js_14-black.svg?logo=next.js)]()
