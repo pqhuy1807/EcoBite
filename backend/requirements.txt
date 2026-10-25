@@ -10,7 +10,7 @@ python-multipart==0.0.9
 # Database & ORM
 sqlalchemy[asyncio]==2.0.30
 asyncpg==0.29.0
-psycopg2-binary==2.9.9
+psycopg2-binary
 alembic==1.13.1
 geoalchemy2==0.15.1
 shapely==2.0.4
