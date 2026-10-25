@@ -132,6 +132,12 @@ EcoBite-Platform/
 ---
 
 ## ⚡ Hướng dẫn Khởi động Nhanh (Quick Start)
+## 🧪 Hướng dẫn Chạy Kiểm thử (Testing)
+
+### Kiểm thử Backend (Pytest)
+```bash
+cd backend
+pytest -v
 
 ### 1. Khởi động Cơ sở Dữ liệu & Redis
 ```bash
@@ -160,6 +166,7 @@ pip install -r requirements.txt
 # uvicorn app.main:app --reload --port 8000
 cd ..
 ```
+> **API Documentation**: Sau khi server chạy, truy cập Swagger UI tại `http://localhost:8000/docs` hoặc ReDoc tại `http://localhost:8000/redoc`.
 
 ### 4. Thiết lập Frontend (Next.js)
 ```bash
@@ -185,26 +192,32 @@ cd ..
 
 ---
 
+---
+
 ## 📚 Bộ Tài liệu Kỹ thuật Chi tiết (Documentation Index)
 
 | Tài liệu | Mô tả nội dung chính |
 | :--- | :--- |
-| 📄 [`docs/01_PRD_and_User_Stories.md`](docs/01_PRD_and_User_Stories.md) | Mục tiêu sản phẩm, Persona, đặc tả 9 tính năng cốt lõi (Món ăn thông thường + AI NLP) & User Stories. |
-| 🏗️ [`docs/02_System_Architecture.md`](docs/02_System_Architecture.md) | Sơ đồ kiến trúc Clean Architecture, luồng dữ liệu Geo-Search, QR HMAC, Gemini NLP Pipeline. |
-| 🗄️ [`docs/03_Database_Schema_ERD.md`](docs/03_Database_Schema_ERD.md) | Thiết kế CSDL PostgreSQL/PostGIS (bảng `dishes`, `orders`), Mermaid ERD và chiến lược GIST Index. |
-| 🔌 [`docs/04_API_Specification.md`](docs/04_API_Specification.md) | Tài liệu RESTful API v1 đầy đủ Request/Response schemas (`/dishes`, `/ml/parse-dish-nlp`). |
+| 📄 [`docs/01_PRD_and_User_Stories.md`](docs/01_PRD_and_User_Stories.md) | Mục tiêu sản phẩm, Persona, đặc tả 9 tính năng cốt lõi & User Stories. |
+| 🏗️ [`docs/02_System_Architecture.md`](docs/02_System_Architecture.md) | Sơ đồ kiến trúc Clean Architecture, Geo-Search, QR HMAC, Gemini NLP Pipeline. |
+| 🗄️ [`docs/03_Database_Schema_ERD.md`](docs/03_Database_Schema_ERD.md) | Thiết kế CSDL PostgreSQL/PostGIS, Mermaid ERD và chiến lược GIST Index. |
+| 🔌 [`docs/04_API_Specification.md`](docs/04_API_Specification.md) | Tài liệu RESTful API v1 đầy đủ Request/Response schemas. |
 | 📋 [`docs/05_Agile_Roadmap_and_Kanban.md`](docs/05_Agile_Roadmap_and_Kanban.md) | Phân chia 6 Sprint (12 tuần), Definition of Ready, Definition of Done & Ma trận Rủi ro. |
-| 🛠️ [`docs/06_Environment_and_ML_Setup_Guide.md`](docs/06_Environment_and_ML_Setup_Guide.md) | Cẩm nang cài đặt chi tiết Docker, venv, cấu hình Gemini API Key và code mẫu NLP Parser. |
+| 🛠️ [`docs/06_Environment_and_ML_Setup_Guide.md`](docs/06_Environment_and_ML_Setup_Guide.md) | Cẩm nang cài đặt chi tiết Docker, venv, cấu hình Gemini API Key. |
 | 🛡️ [`docs/07_AI_Development_Workflow_and_Quality_Gates.md`](docs/07_AI_Development_Workflow_and_Quality_Gates.md) | Quy trình kiểm thử TDD, hướng dẫn cài đặt Git Pre-commit Hook & Quality Gates. |
-| 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn ML/NLP, cấu trúc metadata format và hướng dẫn Backend gọi model inference. |
+| ⚙️ [`backend/SETUP.md`](backend/SETUP.md) | Cẩm nang khắc phục lỗi môi trường Python/PowerShell/Pylance cho lập trình viên Backend. |
+| 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn ML/NLP, cấu trúc metadata format và hướng dẫn Backend gọi model. |
 | 📜 [`AGENTS.md`](AGENTS.md) | Bộ quy tắc & chu trình kiểm thử tự động bắt buộc dành cho AI Coding Assistant. |
 
-## Hướng dẫn cài đặt Backend
+---
 
-1. **Khởi tạo môi trường ảo Python:**
-   ```bash
-   python -m venv venv
+## ⚖️ Tuyên bố Miễn trừ Trách nhiệm & Giấy phép (Disclaimer & License)
 
-   .\venv\Scripts\activate
+- **An toàn Vệ sinh Thực phẩm**: Nền tảng EcoBite đóng vai trò cầu nối công nghệ. Cửa hàng đối tác chịu trách nhiệm pháp lý trực tiếp về chất lượng thực phẩm và thông tin ATVSTP công bố trên hệ thống.
+- **Cảnh báo Dị ứng bằng AI**: Các thông tin suy luận dị ứng (`INFERRED`) do Gemini AI đưa ra chỉ mang tính chất hỗ trợ tham khảo. Người dùng có tiền sử dị ứng nghiêm trọng được khuyến cáo luôn kiểm tra lại với chủ cửa hàng trước khi tiêu dùng.
+- **License**: Dự án thuộc quyền sở hữu học thuật của Group 05 - FIT HCMUS (2024-2025).
 
-   pip install -r backend/requirements.txt
+
+
+
+
