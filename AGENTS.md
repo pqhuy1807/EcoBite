@@ -71,7 +71,7 @@ npm run type-check
 
 1. ❌ **CẤM COMMIT SECRETS**: Tuyệt đối không đọc, ghi hoặc commit file `.env`, token, key bảo mật vào git staging. Luôn sử dụng biến môi trường qua `pydantic-settings`.
 2. ❌ **CẤM HARDCODE TOẠ ĐỘ & QUYỀN**: Mọi logic vị trí địa lý phải thông qua hàm PostGIS `ST_DWithin` hoặc `ST_Distance`. Mọi API nhạy cảm phải bọc Dependency phân quyền `require_roles(...)`.
-3. ❌ **BẢO MẬT MÃ QR**: Mã QR xác nhận đơn hàng phải dùng thuật toán HMAC-SHA256, có thời hạn hiệu lực (`expires_at`), và phải kiểm tra cờ `is_used` để chống Replay Attack (quét 2 lần).
+3. ❌ **BẢO MẬT MÃ QR & THANH TOÁN VNPAY**: Mã QR xác nhận đơn hàng phải dùng thuật toán HMAC-SHA256, có thời hạn hiệu lực (`expires_at`), và phải kiểm tra cờ `is_used` để chống Replay Attack (quét 2 lần). Webhook VNPay IPN bắt buộc xác thực chữ ký HMAC-SHA512 và xử lý idempotent chống ghi nhận giao dịch trùng lặp.
 4. ❌ **CHỐNG OVER-SELLING (TRANH CHẤP TỒN KHO MÓN ĂN)**: Khi trừ số lượng món ăn `remaining_quantity` trong bảng `dishes`, bắt buộc sử dụng DB Transaction với Atomic Update (`WHERE remaining_quantity >= :qty`) hoặc Redis Distributed Lock.
 5. ❌ **GIẢM GIÁ THEO KHUNG GIỜ LÀ RULE-BASED**: Tuyệt đối không dùng mô hình AI phỏng đoán giá gây bất định. Luôn tính giá theo luật thời gian xác định (Rule-based: giờ vàng giảm 40-50%, giờ chót giảm 70%).
 6. ❌ **AI GENAI BẢO MẬT & CẤU TRÚC (MENU GROUNDING & 2-TIER ALLERGENS)**: Khi gọi Google Gemini 2.5 Flash, bắt buộc sử dụng Pydantic Schema Structured Output (`QuickPostExtractionResponse`). Rà soát dị ứng bắt buộc chia rõ 2 nguồn: `EXPLICIT` (chủ quán đọc trực tiếp) và `INFERRED` (AI suy luận tri thức món Việt theo 14 chuẩn EU FIC). Bắt buộc đối chiếu Thực đơn gốc (`menu_items`) để kế thừa ảnh và giá gốc chuẩn xác.

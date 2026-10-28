@@ -1,7 +1,13 @@
 # EcoBite Platform - AI Development Workflow & Quality Gates
 
-**Dự án**: EcoBite - Nền tảng Cứu trợ Thực phẩm Dư thừa & Kết nối Xanh  
-**Tác giả**: Senior DevOps Engineer & Technical Project Manager  
+**Dự án**: EcoBite - Nền tảng Giải cứu Thực phẩm Thông minh & Kết nối Xanh (Food Rescue Platform)
+**Nhóm thực hiện**: Group 5 - Lớp Kỹ nghệ Phần mềm / Computer Science (HCMUS)
+- **Phùng Quốc Huy** (24127402) — *AI and Data Lead / Full-Stack Engineer*
+- **Đặng Trọng Phúc** (24127495) — *Backend Lead & AI Engineer / Full-Stack Engineer*
+- **Đàng Thế Tony** (24127561) — *QA/Tester Lead & Backend Engineer / Full-Stack Engineer*
+- **Võ Ngọc Thịnh** (24127246) — *Frontend Lead / Full-Stack Engineer*
+
+**Phiên bản**: 2.2.0 (Chuẩn hoá Quy trình TDD & Quality Gates)
 **Mục tiêu**: Hướng dẫn quy trình phát triển tính năng chuẩn Big Tech khi kết hợp cùng AI Coding Assistants (Antigravity, Cursor, Copilot).
 
 ---
@@ -110,5 +116,5 @@ pre-commit run --all-files
 
 Khi bạn bắt đầu Sprint 1 và muốn AI code một tính năng mới, hãy sử dụng mẫu prompt sau để AI tự động kích hoạt toàn bộ quy trình chuyên nghiệp:
 
-> **Mẫu Prompt Khuyến nghị:**  
+> **Mẫu Prompt Khuyến nghị:**
 > *"Hãy đọc file `AGENTS.md` và triển khai tính năng [TÊN_TÍNH_NĂNG]. Hãy viết test case trước trong `backend/tests/`, sau đó viết code nghiệp vụ, tự chạy kiểm thử bằng Terminal và chỉ thông báo hoàn thành khi toàn bộ test đã Pass."*
