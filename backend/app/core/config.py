@@ -1,0 +1,68 @@
+"""Application settings, managed exclusively by pydantic-settings.
+
+Every runtime value (database URL, JWT secret, CORS origins) is read from
+environment variables / the local `.env` file so that no secret is ever
+hard-coded into the source tree (AGENTS.md guardrail #1).
+"""
+
+from typing import Literal
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Central, typed application configuration."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
+    # --- Application ---------------------------------------------------------
+    PROJECT_NAME: str = "EcoBite - Smart Meal Management"
+    API_V1_STR: str = "/api/v1"
+    APP_ENV: Literal["development", "staging", "production"] = "development"
+    DEBUG: bool = False
+
+    # --- Security / JWT ------------------------------------------------------
+    # openssl rand -hex 32
+    SECRET_KEY: str = "CHANGE_ME_INSECURE_DEV_SECRET"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # --- Database (async driver used by the app) ------------------------------
+    # Postgres  : postgresql+asyncpg://user:pass@host:5432/db
+    # Local dev : sqlite+aiosqlite:///./ecobite.db
+    DATABASE_URL: str = "sqlite+aiosqlite:///./ecobite.db"
+
+    # --- CORS -----------------------------------------------------------------
+    # Accepts either a JSON array or a comma-separated string in .env.
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: object) -> object:
+        """Split 'http://a,http://b' style strings into a list of origins."""
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @property
+    def sync_database_url(self) -> str:
+        """Synchronous database URL for Alembic migrations (sync drivers only)."""
+        url = self.DATABASE_URL
+        if url.startswith("postgresql+asyncpg"):
+            return url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1)
+        if url.startswith("sqlite+aiosqlite"):
+            return url.replace("sqlite+aiosqlite", "sqlite", 1)
+        return url
+
+
+settings = Settings()
