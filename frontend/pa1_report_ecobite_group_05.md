@@ -94,12 +94,12 @@ Ho Chi Minh City, Academic Year 2025 - 2026
 
 * **Academic Term:** Semester 1 (2025 - 2026)
 
-| No. | Student ID | Full Name | University Email Address | Role in Team | GitHub Username | 
-| ----- | ----- | ----- | ----- | ----- | ----- | 
-| 1 | **24127246** | **Võ Ngọc Thịnh** | vnthinh2418@clc.fitus.edu.vn | **Team Leader / Full-Stack** | `@thinh-vongoc` *(edit if needed)* | 
-| 2 | **24127495** | **Đặng Trọng Phúc** | dtphuc2418@clc.fitus.edu.vn | **Member / Full-Stack** | `@phuc-dangtrong` | 
-| 3 | **24127402** | **Phùng Quốc Huy** | pqhuy2425@clc.fitus.edu.vn | **Member / Full-Stack** | `@huy-phungquoc` | 
-| 4 | **24127561** | **Đàng Thế Tony** | dttony2424@clc.fitus.edu.vn | **Member / Full-Stack** | `@tony-dangthe` | 
+| No. | Student ID | Full Name | University Email Address | Role in Team | GitHub Username |
+| ----- | ----- | ----- | ----- | ----- | ----- |
+| 1 | **24127246** | **Võ Ngọc Thịnh** | vnthinh2418@clc.fitus.edu.vn | **Team Leader / Full-Stack** | `@thinh-vongoc` *(edit if needed)* |
+| 2 | **24127495** | **Đặng Trọng Phúc** | dtphuc2418@clc.fitus.edu.vn | **Member / Full-Stack** | `@phuc-dangtrong` |
+| 3 | **24127402** | **Phùng Quốc Huy** | pqhuy2425@clc.fitus.edu.vn | **Member / Full-Stack** | `@huy-phungquoc` |
+| 4 | **24127561** | **Đàng Thế Tony** | dttony2424@clc.fitus.edu.vn | **Member / Full-Stack** | `@tony-dangthe` |
 
 # SECTION B: PROJECT PROPOSAL (ECOBITE)
 
@@ -383,16 +383,16 @@ To benchmark industry standards and identify opportunities for architectural and
 
 ## C.3 Feature Matrix & Cross-Comparison
 
-| Evaluation Dimension | Too Good To Go | Yindii | Proposed EcoBite Platform | 
-| ----- | ----- | ----- | ----- | 
-| **Primary Platforms** | iOS / Android | iOS / Android | iOS / Android (Mobile-First) + Admin Web | 
-| **Surprise Bag Concept** | Yes (Core feature) | Yes (Mixed with itemized items) | Yes (Surprise Bag + Specific Tagging) | 
-| **Pricing Model** | Fixed 67% markdown | Fixed 50%–70% discount | **AI Dynamic Markdown (Time-decay pricing)** | 
-| **Order Handover Method** | In-app Swipe button | Manual receipt verification | **Cryptographic QR Code Scanning** | 
-| **Recommendation Engine** | Basic distance sorting | Basic category filtering | **AI Context-Aware Recommendation System** | 
-| **Payment Integration** | Stripe / Apple Pay / PayPal | Local Thai Cards / PromptPay | **MoMo, ZaloPay, VNPay, Card, Cash-reserve** | 
-| **Gamification & Social** | Personal CO2 stats | Impact badges | **CO2 Leaderboards, Badges, Student Perks** | 
-| **Target Localization** | Western European/US | Southeast Asia (Bangkok) | **Vietnam Campuses & Urban Retail Density** | 
+| Evaluation Dimension | Too Good To Go | Yindii | Proposed EcoBite Platform |
+| ----- | ----- | ----- | ----- |
+| **Primary Platforms** | iOS / Android | iOS / Android | iOS / Android (Mobile-First) + Admin Web |
+| **Surprise Bag Concept** | Yes (Core feature) | Yes (Mixed with itemized items) | Yes (Surprise Bag + Specific Tagging) |
+| **Pricing Model** | Fixed 67% markdown | Fixed 50%–70% discount | **AI Dynamic Markdown (Time-decay pricing)** |
+| **Order Handover Method** | In-app Swipe button | Manual receipt verification | **Cryptographic QR Code Scanning** |
+| **Recommendation Engine** | Basic distance sorting | Basic category filtering | **AI Context-Aware Recommendation System** |
+| **Payment Integration** | Stripe / Apple Pay / PayPal | Local Thai Cards / PromptPay | **MoMo, ZaloPay, VNPay, Card, Cash-reserve** |
+| **Gamification & Social** | Personal CO2 stats | Impact badges | **CO2 Leaderboards, Badges, Student Perks** |
+| **Target Localization** | Western European/US | Southeast Asia (Bangkok) | **Vietnam Campuses & Urban Retail Density** |
 
 ## C.4 Competitive Edge & Innovation of EcoBite
 
@@ -542,15 +542,15 @@ Group 05 strictly adopts the **Agile/Scrum framework** across the semester:
 
 The team has established and verified the required course infrastructure:
 
-| Category | Designated Tool | Group Workspace / URL | Purpose | 
-| ----- | ----- | ----- | ----- | 
-| **Course Submissions** | Moodle | HCMUS Courses Portal | Official deliverable submission | 
-| **Class Discussion** | FB Group / Forum | Course Official Group | General announcements & Q&A | 
-| **Team Communication** | Discord & Zalo | Group 05 Server | Daily collaboration & meetings | 
-| **Task Management** | Jira Software | `ecobite-hcmus.atlassian.net` | Scrum sprint board & issue tracking | 
-| **Version Control** | GitHub (Private) | `github.com/hcmus-cs300-g05/ecobite` | Source code & documentation repo | 
-| **Spec-Driven Dev** | Spec Kit | Local CLI / Repository setup | Specification-to-code workflow | 
-| **AI Coding Assistance** | GitHub Copilot / Cursor | Student Verified Accounts | AI-assisted development | 
+| Category | Designated Tool | Group Workspace / URL | Purpose |
+| ----- | ----- | ----- | ----- |
+| **Course Submissions** | Moodle | HCMUS Courses Portal | Official deliverable submission |
+| **Class Discussion** | FB Group / Forum | Course Official Group | General announcements & Q&A |
+| **Team Communication** | Discord & Zalo | Group 05 Server | Daily collaboration & meetings |
+| **Task Management** | Jira Software | `ecobite-hcmus.atlassian.net` | Scrum sprint board & issue tracking |
+| **Version Control** | GitHub (Private) | `github.com/hcmus-cs300-g05/ecobite` | Source code & documentation repo |
+| **Spec-Driven Dev** | Spec Kit | Local CLI / Repository setup | Specification-to-code workflow |
+| **AI Coding Assistance** | GitHub Copilot / Cursor | Student Verified Accounts | AI-assisted development |
 
 ## E.3 Git Repository Structure & Conventions
 

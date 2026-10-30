@@ -12,13 +12,12 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import StaticPool
 
+# Importing the model modules registers every ORM class on `Base.metadata`
+# so create_all() can build the full test schema.
+import app.models as _models  # noqa: F401
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-
-# Importing the model modules registers every ORM class on `Base.metadata`
-# so create_all() can build the full test schema.
-from app.models import user as _user_model  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -46,7 +45,7 @@ async def db_session(db_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 
 
 @pytest.fixture
-def override_get_db(db_session: AsyncSession) -> None:
+def override_get_db(db_session: AsyncSession):
     """Swap the production session for the test one inside app dependencies."""
 
     async def _override() -> AsyncIterator[AsyncSession]:
