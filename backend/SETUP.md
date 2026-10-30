@@ -71,7 +71,7 @@ Mở Terminal tại thư mục `backend/`:
 python -m venv venv
 ```
 
-* **Nếu dùng PowerShell bị lỗi chặn script (`UnauthorizedAccess`):**  
+* **Nếu dùng PowerShell bị lỗi chặn script (`UnauthorizedAccess`):**
   Chạy lệnh mở quyền trước:
   ```powershell
   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
