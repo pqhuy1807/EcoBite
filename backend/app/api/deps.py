@@ -1,5 +1,6 @@
 """Shared FastAPI dependencies: DB session, current user, role gating."""
 
+import uuid
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -38,7 +39,7 @@ async def get_current_user(
     if raw_subject is None:
         raise credentials_exception
     try:
-        user_id = int(raw_subject)
+        user_id = uuid.UUID(raw_subject)
     except ValueError:
         raise credentials_exception from None
 

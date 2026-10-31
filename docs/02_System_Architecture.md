@@ -1,21 +1,27 @@
-# EcoBite Platform - System Architecture & Technical Design
+# 🏗️ EcoBite Platform - System Architecture & Technical Design
 
-**Dự án**: EcoBite - Nền tảng Cứu trợ Thực phẩm Dư thừa & Kết nối Xanh
-**Tác giả**: Senior DevOps Engineer & Technical Project Manager
-**Phiên bản**: 2.1.0 (Bổ sung Phân hệ AI Intelligence Suite & Hệ thống Gợi ý Món ăn Thông minh)
+**Dự án**: EcoBite - Nền tảng Giải cứu Thực phẩm Thông minh & Kết nối Xanh (Food Rescue Platform)
+**Nhóm thực hiện**: Group 5 - Lớp Kỹ nghệ Phần mềm / Computer Science (HCMUS)
+- **Phùng Quốc Huy** (24127402) — *AI and Data Lead / Full-Stack Engineer*
+- **Đặng Trọng Phúc** (24127495) — *Backend Lead & AI Engineer / Full-Stack Engineer*
+- **Đàng Thế Tony** (24127561) — *QA/Tester Lead & Backend Engineer / Full-Stack Engineer*
+- **Võ Ngọc Thịnh** (24127246) — *Frontend Lead / Full-Stack Engineer*
+
+**Phiên bản**: 2.2.0 (Đồng bộ Cổng thanh toán VNPay IPN, Thuật toán Heuristic Scoring & Gemini 2.5 Flash)
+**Trạng thái**: Approved for Implementation
 
 ---
 
 ## 1. Kiến trúc Hệ thống Tổng quan (High-Level Architecture)
 
-Hệ thống EcoBite được thiết kế theo mô hình **Decoupled Three-Tier Architecture** kết hợp phân hệ **AI Intelligence Suite (Google Gemini 2.5 Flash)** và thành phần **AI/ML Inference Pipeline độc lập**.
+Hệ thống EcoBite được thiết kế theo mô hình **Decoupled Three-Tier Architecture** mở rộng, kết hợp **Cổng thanh toán không tiền mặt VNPay (HMAC-SHA512)** và phân hệ **AI Intelligence Suite (Google Gemini 2.5 Flash)**.
 
 ```mermaid
 flowchart TD
-    subgraph ClientLayer ["Client Layer (Next.js 14 App Router)"]
-        ConsumerApp["Consumer Web / Mobile PWA\n(Leaflet Map, QR Viewer, Smart Recommendations)"]
-        PartnerPortal["Store Partner Portal\n(Quick-Post NLP, html5-qrcode Scanner)"]
-        AdminDashboard["System Admin Dashboard\n(KYC Review, Metrics, CO2 Reports)"]
+    subgraph ClientLayer ["Client Layer (Next.js 14 App Router - Responsive PWA)"]
+        ConsumerApp["Consumer Web / Mobile PWA\n(Leaflet Radar Map, QR Viewer, Smart Recommendations, VNPay-QR)"]
+        PartnerPortal["Store Partner Portal\n(Quick-Post Multimodal Audio, html5-qrcode Scanner)"]
+        AdminDashboard["System Admin Dashboard\n(Store KYC Verification, System Metrics, CO2 Reports)"]
     end
 
     subgraph Gateway ["Edge & Security"]
@@ -23,19 +29,19 @@ flowchart TD
     end
 
     subgraph BackendLayer ["Backend Application (FastAPI Asynchronous Runtime)"]
-        APIEndpoints["FastAPI Routers (/api/v1)\n- Auth, Stores, Dishes, Recommendations\n- Orders, QR Verify, Reviews, GreenPoints"]
-        CoreMiddleware["Core Services & Middlewares\n- JWT RBAC Guard\n- HMAC QR Signer\n- Rule-based Discount Calculator\n- Gemini GenAI Client\n- Smart Recommendation Engine"]
+        APIEndpoints["FastAPI Routers (/api/v1)\n- /auth, /stores, /dishes, /recommendations\n- /orders, /payments/vnpay, /ml, /green-points"]
+        CoreMiddleware["Core Services & Middlewares\n- JWT RBAC Guard (Dual Tokens)\n- Rule-based Discount Calculator\n- Inventory Atomic Lock Engine\n- Dynamic HMAC-SHA256 QR Signer\n- VNPay IPN Webhook Idempotent Handler\n- Google GenAI Client (Gemini 2.5 Flash)"]
         DBSession["Async SQLAlchemy 2.0 Engine\n(asyncpg connection pool)"]
     end
 
     subgraph DataLayer ["Data & Cache Layer (Docker Compose)"]
-        PostgreSQL["PostgreSQL 16 + PostGIS 3.4\n- Spatial Geometry(Point, 4326)\n- GIST Spatial Index\n- Dishes, User Preferences, Orders"]
-        RedisStore["Redis 7\n- Rate Limiting\n- Inventory Locks\n- Recommendation Cache\n- QR Nonce Tracking"]
+        PostgreSQL["PostgreSQL 16 + PostGIS 3.4\n- Spatial Geometry(Point, 4326) & GIST Index\n- Menu Items, Surplus Dishes, Orders\n- User Preferences & Allergen Invariants"]
+        RedisStore["Redis 7\n- Rate Limiting\n- Inventory Distributed Locks\n- Single-Use QR Nonce Tracking (24h TTL)\n- Recommendation & Session Cache"]
     end
 
-    subgraph AISuite ["Phân hệ Trí tuệ Nhân tạo (AI Intelligence Suite)"]
-        GeminiNLP["Google Gemini 2.5 Flash (Google AI Studio Free Tier)\n- Quick-Post NLP Extraction\n- Food Safety Allergen Tagging\n- Semantic Search Intent Parser\n- Recommendation Justification Generator"]
-        MLDir["ml/weights/*.pt\n(PyTorch Computer Vision Checkpoints)"]
+    subgraph ExternalServices ["External Services & Gateways"]
+        VNPayGateway["VNPay Payment Gateway\n- VNPAY-QR Dynamic Generation\n- HMAC-SHA512 IPN Webhook Callback"]
+        GeminiNLP["Google Gemini 2.5 Flash API (Google AI Studio)\n- Native Multimodal Audio Ingestion\n- Menu-Catalog Grounding & 2-Tier Allergen Guard\n- Generative AI Justification Generator"]
     end
 
     ClientLayer -->|HTTPS / REST / WSS| NginxGateway
@@ -45,25 +51,26 @@ flowchart TD
     DBSession --> PostgreSQL
     APIEndpoints --> RedisStore
     CoreMiddleware -->|Google GenAI SDK| GeminiNLP
-    APIEndpoints -.->|Local Inference| MLDir
+    APIEndpoints <-->|Redirect & IPN Webhook| VNPayGateway
 ```
 
 ---
 
 ## 2. Luồng Dữ liệu Nghiệp vụ Chính (Data Flow Sequences)
 
-### 2.1. Luồng Trợ lý AI Bóc tách Hàng loạt Món ăn & Khớp Thực đơn Gốc (Batch Quick-Post & Menu Grounding)
-1. **Frontend**: Chủ quán bấm ghi âm 1 câu ngắn (hoặc nhập text): *"Còn 5 cơm sườn chả, 3 bún thịt nướng xả từ giờ đến 3h chiều nhé"*.
-2. **FastAPI (`POST /api/v1/ml/parse-dish-nlp`)**: Tiếp nhận file audio hoặc text, lấy thời gian thực `current_server_time` của server và truy vấn Thực đơn gốc (`menu_items`) của quán từ PostgreSQL.
+### 2.1. Luồng Trợ lý AI Bóc tách Hàng loạt Món ăn & Khớp Thực đơn Gốc (AI Feature 1)
+
+1. **Frontend**: Nhân viên hoặc chủ quán gửi file ghi âm ngắn (Native Multimodal Audio) hoặc văn bản: *"Còn 5 cơm sườn chả, 3 bún thịt nướng xả từ giờ đến 3h chiều nhé"*.
+2. **FastAPI (`POST /api/v1/ml/parse-dish-nlp`)**: Truy vấn Danh mục Thực đơn Cơ bản (`menu_items`) của quán từ PostgreSQL và gắn mốc `current_server_time`.
 3. **Gemini 2.5 Flash (Native Audio & Structured Outputs)**:
-   - Nhận trực tiếp luồng Audio + Danh mục Menu gốc + `current_server_time` trong System Prompt.
-   - Phân tích ngữ nghĩa, tự động giải mã giờ tương đối (*"từ giờ đến 3h chiều"* $\rightarrow$ `13:55:00` - `15:00:00`).
-   - Khớp `matched_menu_id` với từng món trong thực đơn để tự động kế thừa **Ảnh món ăn và Giá gốc**.
-   - **Rà soát dị ứng 2 tầng (2-Tier Allergen Guard)**:
+   - Nhận trực tiếp file âm thanh thô, hiểu chuẩn xác phương ngữ và tiếng lóng ẩm thực Việt (*"bốn lăm cành"*, *"bì chả"*).
+   - So khớp tên món với thực đơn gốc để gán `matched_menu_id`, tự động kế thừa **Ảnh chuẩn và Giá gốc**.
+   - **Rà soát dị ứng 2 tầng (Two-Tier Allergen Guard)**:
      - `EXPLICIT`: Thành phần chủ quán đọc rõ.
-     - `INFERRED`: AI suy luận từ công thức món Việt (Trứng trong chả, Nước mắm cá, Đậu phộng trong mỡ hành...) theo chuẩn 14 chất EU FIC.
-     - Tách riêng `dietary_notes` (Có hành ngò, cay vừa, ăn chay).
-4. **Frontend Preview (Draft Cards)**: Hiển thị danh sách các thẻ món ăn đã có sẵn ảnh đại diện từ Menu gốc, lộ trình giảm giá theo giờ và nút gạt xác nhận dị ứng. Chủ quán chỉ cần 1 chạm **"Đăng tất cả"** để lưu hàng loạt vào bảng `dishes`.
+     - `INFERRED`: Suy luận tri thức ẩm thực truyền thống theo 14 chuẩn EU FIC (Trứng trong chả trứng, Cá trong nước mắm, Đậu phộng trong mỡ hành/bún thịt nướng, Gluten trong bánh mì).
+     - Gắn cờ văn hóa địa phương `dietary_notes` (Có mỡ hành, độ cay, đồ chua, ăn chay).
+   - Quy đổi thời gian tương đối (*"từ giờ đến 3h chiều"*) thành dấu thời gian ISO 8601 tuyệt đối `13:55:00 - 15:00:00`.
+4. **Draft Cards & 1-Tap Batch Post**: Chủ quán xem lại danh sách thẻ món ăn đã có sẵn ảnh đẹp và tag dị ứng, gạt nút xác nhận rồi bấm **"Đăng tất cả"** để lưu hàng loạt vào bảng `dishes`.
 
 ```mermaid
 sequenceDiagram
@@ -77,8 +84,8 @@ sequenceDiagram
     Partner->>Frontend: Ghi âm giọng nói: "Còn 5 cơm sườn, 3 bún thịt nướng từ giờ đến 3h chiều"
     Frontend->>Backend: POST /api/v1/ml/parse-dish-nlp (audio_file / multipart)
     Backend->>DB: SELECT * FROM menu_items WHERE store_id = :store_id
-    DB-->>Backend: Danh sách thực đơn gốc (Tên, Ảnh, Giá gốc, Thành phần)
-    Backend->>Gemini: generate_content(model="gemini-2.5-flash", contents=[Audio, MenuContext, current_time], schema=QuickPostExtractionResponse)
+    DB-->>Backend: Danh mục thực đơn gốc (Tên, Ảnh chuẩn, Giá gốc, Thành phần)
+    Backend->>Gemini: generate_content(model="gemini-2.5-flash", contents=[Audio, MenuContext, current_server_time], schema=QuickPostExtractionResponse)
     Gemini-->>Backend: JSON: {pickup_start, pickup_end, items: [SurplusDishItem, ...]}
     Backend-->>Frontend: 200 OK (Danh sách món đã khớp Menu ID, ảnh, giá và dị ứng 2 tầng)
     Frontend-->>Partner: Hiển thị Draft Cards (Có ảnh gốc + Tag dị ứng Explicit/Inferred)
@@ -90,18 +97,20 @@ sequenceDiagram
 
 ---
 
-### 2.2. Luồng Hệ thống Gợi ý Món ăn Thông minh Cá nhân hóa (AI Smart Recommendation)
-Động cơ gợi ý hoạt động theo mô hình **Hybrid Context-Aware Matcher**:
-1. **Frontend**: Gửi tọa độ GPS hiện tại của người dùng kèm JWT token xác thực: `GET /api/v1/recommendations/personalized?lat=10.77&lng=106.70`.
-2. **Backend**:
-   - Truy vấn thông tin `user_preferences` (chế độ ăn, danh sách dị ứng cần tránh, ngân sách ưa thích) và lịch sử 5 đơn hàng gần nhất.
-   - Truy vấn PostGIS: Lấy các món ăn khả dụng (`remaining_quantity > 0`) trong bán kính 2km.
-   - **Bộ lọc An toàn & Ngữ cảnh**:
-     - Loại trừ hoàn toàn các món có chứa chất dị ứng của người dùng.
-     - Ưu tiên các món đang bước vào 30 phút cuối của luật giảm giá 70% (Deal khẩn cấp).
-   - **Bộ xếp hạng (Scoring)**: Tính điểm phù hợp dựa trên: Khoảng cách (40%) + Mức giảm giá (30%) + Khớp khẩu vị (30%).
-3. **Gemini 2.5 Flash**: Nhận thông tin Top 3 món điểm cao nhất và profile tóm tắt của user, sinh ra câu văn giải thích tự nhiên, ngắn gọn (Justification) để hiển thị lên UI.
-4. **Trả kết quả**: Trả về danh sách món gợi ý kèm tag "Lý do AI gợi ý".
+### 2.2. Luồng Hệ thống Gợi ý Món ăn Thông minh & Tìm kiếm Ngữ nghĩa (AI Feature 2)
+
+Hệ thống hoạt động theo mô hình **Hybrid 3 Lớp**:
+
+1. **Layer 1 - Hard Safety Invariant (SQL & PostGIS)**:
+   - Truy vấn PostGIS: Lọc các món khả dụng (`remaining_quantity > 0`) trong bán kính 1–3 km.
+   - **Bảo đảm an toàn dị ứng tuyệt đối**: Bắt buộc loại trừ 100% các món ăn chứa thành phần dị ứng trong `user_preferences.excluded_allergens` tại cấp độ câu lệnh SQL Database. Tuyệt đối không giao phó việc bảo vệ tính mạng người dùng cho văn bản AI xác suất.
+2. **Layer 2 - Multi-Factor Heuristic Scoring**:
+   - Xếp hạng các món ứng viên an toàn dựa trên công thức tổng hợp trọng số:
+     $$\text{Score} = (0.40 \times \text{Proximity}) + (0.30 \times \text{Discount Depth \& Time Urgency}) + (0.30 \times \text{Taste Profile Match})$$
+   - Ưu tiên các **Giao dịch Giải cứu Cấp bách (Urgent Rescue Deals)** bước vào 30 phút cuối áp dụng luật giảm giá sâu 70%.
+3. **Layer 3 - Generative AI Personalization**:
+   - Gửi hồ sơ khẩu vị tóm tắt và Top 3 món có điểm cao nhất sang Gemini 2.5 Flash.
+   - Mô hình sinh lời giải thích ngắn gọn, xúc tích (20–30 từ), giàu cảm xúc hiển thị trực tiếp trên thẻ món ăn UI.
 
 ```mermaid
 sequenceDiagram
@@ -112,25 +121,26 @@ sequenceDiagram
     participant PostGIS as PostgreSQL (Dishes + Preferences)
     participant Gemini as Google Gemini 2.5 Flash API
 
-    Consumer->>Frontend: Mở trang chủ EcoBite
+    Consumer->>Frontend: Mở trang chủ EcoBite (bật GPS)
     Frontend->>Backend: GET /api/v1/recommendations/personalized?lat=10.77&lng=106.70
-    Backend->>PostGIS: 1. Lấy user_preferences & lịch sử món\n2. Query PostGIS lấy món trong bán kính 2km
-    PostGIS-->>Backend: Trả về danh sách ứng viên
-    Backend->>Backend: Lọc dị ứng + Chấm điểm Ranking Top 3
-    Backend->>Gemini: Yêu cầu sinh câu lý do gợi ý cho Top 3 món
-    Gemini-->>Backend: Trả về lý do tự nhiên ("Bạn thích bún vào trưa...")
-    Backend-->>Frontend: 200 OK + Danh sách Top 3 kèm ai_justification
-    Frontend-->>Consumer: Hiển thị mục "Gợi ý thông minh cho bạn"
+    Backend->>PostGIS: 1. Lấy user_preferences (excluded_allergens, budget, categories)\n2. SQL Hard Filter: Lọc bán kính 1-3km & loại trừ 100% dị ứng
+    PostGIS-->>Backend: Danh sách món ăn an toàn
+    Backend->>Backend: Tính điểm Heuristic Score Top 3 (Proximity 40%, Discount/Urgency 30%, Taste 30%)
+    Backend->>Gemini: Yêu cầu sinh lời bình ngắn gọn (20-30 từ) cho Top 3 món
+    Gemini-->>Backend: Lời giải thích tự nhiên ("Bạn thích súp mì trưa, quán cách 350m đang giảm 67%...")
+    Backend-->>Frontend: 200 OK + Top 3 Recommendations kèm ai_justification
+    Frontend-->>Consumer: Hiển thị mục "Gợi ý giải cứu thông minh cho bạn"
 ```
 
 ---
 
-### 2.3. Luồng Luật Giảm giá Theo Khung giờ (Rule-based Time-based Discounting)
-Hệ thống EcoBite sử dụng **Luật Thời gian Xác định (Deterministic Business Rules)**:
+### 2.3. Luồng Giảm giá theo Khung giờ Tất định (Feature 3)
+
+Hệ thống EcoBite sử dụng **Luật Thời gian Xác định (Deterministic Business Rules)**, không dùng AI đoán giá:
 - Mỗi món ăn có 3 mức giá:
-  1. `original_price`: Giá niêm yết ban đầu (ví dụ: `50.000đ`).
-  2. `rescue_price`: Giá giải cứu tiêu chuẩn trong khung giờ mở bán (ví dụ: `25.000đ` - giảm 50%).
-  3. `rule_discount_price`: Giá giờ chót giảm sâu hơn trong 30-45 phút cuối (ví dụ: `15.000đ` - giảm 70%).
+  1. `original_price`: Giá niêm yết ban đầu trên thực đơn.
+  2. `rescue_price`: Giá giải cứu tiêu chuẩn (giảm 40% – 50%) trong suốt khung giờ mở bán.
+  3. `rule_discount_price`: Giá giờ chót giảm sâu tới 70% trong 30–45 phút cuối trước giờ đóng cửa.
 - **Công thức tính giá tại thời điểm $T_{\text{current}}$**:
   $$\text{Current Price} = \begin{cases}
   \text{rule\_discount\_price} & \text{nếu } T_{\text{current}} \ge \text{rule\_discount\_start\_time} \\
@@ -140,9 +150,46 @@ Hệ thống EcoBite sử dụng **Luật Thời gian Xác định (Deterministi
 
 ---
 
-### 2.4. Luồng Sinh & Quét Mã QR Xác nhận Nhận hàng (Pickup Verification)
+### 2.4. Luồng Thanh toán Không Tiền mặt Liền mạch qua VNPay (Feature 6)
 
-Để chống gian lận (chụp màn hình gửi người khác, tái sử dụng mã nhiều lần), mã QR sử dụng chữ ký điện tử **HMAC-SHA256 Token**.
+1. **Khách bấm Đặt hàng**: Backend thực hiện câu lệnh Atomic Lock cập nhật tồn kho `WHERE remaining_quantity >= :qty`.
+2. **Khởi tạo Giao dịch VNPay**: Backend gọi thuật toán sinh URL thanh toán có chữ ký bảo mật HMAC-SHA512 (`vnp_SecureHash`).
+3. **Thanh toán VNPAY-QR**: Khách hàng mở ứng dụng Mobile Banking hoặc Ví điện tử quét mã VNPAY-QR và thanh toán.
+4. **Xử lý Webhook IPN Idempotent**:
+   - Cổng VNPay gửi tín hiệu Instant Payment Notification (IPN) ngầm sang Backend qua `GET /api/v1/payments/vnpay/ipn`.
+   - Backend đối soát chữ ký HMAC-SHA512.
+   - Kiểm tra mã giao dịch chống trùng lặp (idempotency check trong Redis/DB). Nếu giao dịch chưa xử lý, cập nhật `orders.payment_status = 'PAID'` và tự động sinh mã QR nhận món HMAC-SHA256.
+   - Trả phản hồi `{"RspCode": "00", "Message": "Confirm Success"}` cho VNPay.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Consumer as Khách mua hàng
+    participant Frontend as App Khách (Next.js)
+    participant Backend as FastAPI Server
+    participant RedisDB as PostgreSQL & Redis
+    participant VNPay as Cổng thanh toán VNPay
+
+    Consumer->>Frontend: Chọn món & Phương thức thanh toán VNPay
+    Frontend->>Backend: POST /api/v1/orders {dish_id, qty, payment_method: "VNPAY"}
+    Backend->>RedisDB: UPDATE dishes SET remaining_quantity = remaining_quantity - 1 WHERE remaining_quantity >= 1
+    RedisDB-->>Backend: 1 row affected (Atomic lock thành công)
+    Backend->>Backend: Tạo VNPay Payment URL (Ký chữ ký HMAC-SHA512)
+    Backend-->>Frontend: Trả về payment_url
+    Frontend->>VNPay: Điều hướng khách sang cổng VNPay (Hiển thị VNPAY-QR)
+    Consumer->>VNPay: Quét mã QR bằng App Ngân hàng & xác nhận thanh toán
+    VNPay->>Backend: Server-to-Server IPN Webhook (HMAC-SHA512 verify)
+    Backend->>Backend: Xác thực chữ ký & kiểm tra idempotent (chống xử lý 2 lần)
+    Backend->>RedisDB: UPDATE orders SET payment_status = 'PAID', status = 'CONFIRMED'
+    Backend->>RedisDB: Sinh mã QR nhận món HMAC-SHA256
+    Backend-->>VNPay: RspCode 00: Confirm Success
+    VNPay-->>Frontend: Redirect khách về Return URL
+    Frontend-->>Consumer: Hiển thị "Thanh toán thành công! Mã QR nhận món đã sẵn sàng"
+```
+
+---
+
+### 2.5. Luồng Quét Mã QR Xác nhận Đơn hàng tại Cửa hàng (Feature 7)
 
 ```mermaid
 sequenceDiagram
@@ -156,30 +203,35 @@ sequenceDiagram
 
     Consumer->>FrontendCust: Bấm xem mã nhận món #EB-1024
     FrontendCust->>Backend: GET /api/v1/orders/1024/qr-token
-    Backend->>Backend: Tạo Token: HMAC_SHA256(order_id + user_id + timestamp + nonce, SECRET)
+    Backend->>Backend: Sinh Token: HMAC_SHA256(order_id + user_id + deadline + nonce, SECRET)
     Backend-->>FrontendCust: Trả về QR payload signed token
-    FrontendCust-->>Consumer: Hiển thị mã QR động
+    FrontendCust-->>Consumer: Hiển thị mã QR động (có đồng hồ hạn giờ)
 
     Partner->>FrontendPart: Bật camera quét mã QR của khách
     FrontendPart->>Backend: POST /api/v1/orders/verify-qr { qr_token: "..." }
-    Backend->>Backend: 1. Đối soát chữ ký HMAC\n2. Kiểm tra hạn sử dụng (Timestamp check)\n3. Kiểm tra Replay Attack trong Redis
+    Backend->>Backend: 1. Đối soát chữ ký HMAC-SHA256\n2. Kiểm tra hạn nhận món (pickup_deadline)\n3. Kiểm tra Replay Attack (Nonce trong Redis & is_used)
     Backend->>DB: UPDATE orders SET status = 'COMPLETED', completed_at = NOW()
-    Backend->>DB: Cộng Green Points cho User & Store
+    Backend->>DB: Đánh dấu qr_tokens.is_used = true & lưu Redis Nonce (TTL 24h)
+    Backend->>DB: Tự động cộng Điểm Xanh (2.5kg CO2e) cho người dùng
     Backend-->>FrontendPart: 200 OK - Xác nhận giao hàng thành công!
     Backend-->>FrontendCust: Push Notification: "Đơn hàng đã hoàn tất! Bạn được cộng +50 Điểm Xanh"
 ```
 
 ---
 
-## 3. Kiến trúc Bảo mật & Phân quyền (Security & Authorization)
+## 3. Kiến trúc Bảo mật & Toàn vẹn Dữ liệu (Security & Data Integrity)
 
-1. **JWT Dual-Token Authentication**:
-   - `Access Token`: Hạn dùng 1 ngày (1440 phút), mang thông tin `sub` (user_id), `role`, `email`.
-   - `Refresh Token`: Hạn dùng 30 ngày, lưu mã băm an toàn trong database.
-2. **Role-Based Access Control (RBAC)**:
-   - Áp dụng cơ chế FastAPI Dependency Injection (`get_current_active_user`, `require_roles(["ADMIN"])`).
-3. **Chống Tấn công Đặt hàng Đồng thời (Race Conditions & Over-selling)**:
-   - Áp dụng Redis Distributed Lock hoặc PostgreSQL `SELECT ... FOR UPDATE` khi xử lý đơn hàng món ăn cuối cùng.
-4. **Bảo mật Mã QR Xác nhận Đơn**:
-   - Sử dụng thuật toán HMAC-SHA256 với secret key riêng biệt `QR_SIGNATURE_SECRET`.
-   - Mỗi token có hạn sử dụng ngắn và chỉ được chấp nhận 1 lần duy nhất (Single-use Nonce lưu trong Redis với TTL 24 giờ).
+1. **JWT Dual-Token & RBAC**:
+   - `Access Token`: Thời hạn ngắn (24 giờ), mang thông tin `sub` (user_id), `role`, `email`.
+   - `Refresh Token`: Thời hạn 30 ngày, lưu mã băm an toàn trong CSDL, tự động thu hồi khi đăng xuất.
+   - Phân quyền RBAC chặt chẽ qua FastAPI Dependencies: `require_roles(["STORE_PARTNER"])`, `require_roles(["ADMIN"])`.
+2. **Khóa Tồn kho Chống Bán Vượt (Zero Over-selling)**:
+   - Thực thi cập nhật SQL nguyên tử kết hợp kiểm tra điều kiện `WHERE remaining_quantity >= :qty` và cơ chế Distributed Lock của Redis.
+3. **Bảo mật Thanh toán VNPay (HMAC-SHA512 & Idempotency)**:
+   - Toàn bộ tham số gửi sang VNPay và nhận về từ IPN Webhook đều được kiểm tra chữ ký băm mật mã học HMAC-SHA512 bằng `vnp_HashSecret`.
+   - Cơ chế xử lý Webhook Idempotent ngăn ngừa việc ghi nhận thanh toán trùng lặp khi VNPay thử lại nhiều lần.
+4. **Mã QR Dùng Một Lần (Single-Use Dynamic HMAC-SHA256)**:
+   - Chứa `order_id`, `consumer_id`, `pickup_deadline`, và chuỗi ngẫu nhiên `nonce`.
+   - Loại trừ hoàn toàn rủi ro chụp màn hình gửi người khác hoặc tấn công Replay Attack nhờ cờ `is_used` trong DB và khóa Redis Nonce TTL 24 giờ.
+5. **Bảo đảm An toàn Dị ứng Cứng (Allergen Hard Invariant)**:
+   - Các chất dị ứng trong `user_preferences.excluded_allergens` được lọc cứng ở tầng câu lệnh SQL PostGIS, không phụ thuộc vào kết quả sinh ngẫu nhiên xác suất của AI.

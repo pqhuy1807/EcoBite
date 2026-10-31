@@ -1,8 +1,13 @@
 # EcoBite Platform - Environment, AI & ML Subsystem Setup Guide
 
-**Dự án**: EcoBite - Nền tảng Cứu trợ Thực phẩm Dư thừa & Kết nối Xanh
-**Tác giả**: Senior DevOps Engineer & Technical Project Manager
-**Phiên bản**: 2.0.0 (Cập nhật: Google Gemini 2.5 Flash Free Tier + Giảm giá Rule-based + PostGIS)
+**Dự án**: EcoBite - Nền tảng Giải cứu Thực phẩm Thông minh & Kết nối Xanh (Food Rescue Platform)
+**Nhóm thực hiện**: Group 5 - Lớp Kỹ nghệ Phần mềm / Computer Science (HCMUS)
+- **Phùng Quốc Huy** (24127402) — *AI and Data Lead / Full-Stack Engineer*
+- **Đặng Trọng Phúc** (24127495) — *Backend Lead & AI Engineer / Full-Stack Engineer*
+- **Đàng Thế Tony** (24127561) — *QA/Tester Lead & Backend Engineer / Full-Stack Engineer*
+- **Võ Ngọc Thịnh** (24127246) — *Frontend Lead / Full-Stack Engineer*
+
+**Phiên bản**: 2.2.0 (Cập nhật: Google Gemini 2.5 Flash + VNPay Sandbox + PostGIS 16 + Redis 7)
 **Mục tiêu**: Hướng dẫn chi tiết thiết lập môi trường phát triển toàn diện từ A-Z.
 
 ---
