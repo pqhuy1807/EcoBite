@@ -28,6 +28,8 @@ Security MUST be enforced at the application, API, database, and integration bou
 - Load configuration and sensitive values through environment variables and `pydantic-settings`.
 - Protect sensitive APIs with role-based authorization using the `require_roles(...)` dependency.
 - Support the defined application roles: `CONSUMER`, `STORE_PARTNER`, and `ADMIN`.
+- Authentication MUST use JWT access tokens signed with the `python-jose` library using the algorithm configured in Settings (`HS256`). The signing secret MUST come exclusively from `SECRET_KEY` via `pydantic-settings`; tokens MUST embed an expiration (`exp`) and MUST be verified on every protected request with `401` + `WWW-Authenticate: Bearer` on failure.
+- Passwords MUST be persisted only as bcrypt hashes through passlib (`bcrypt` pinned at `4.0.1` for passlib 1.7.4 compatibility). Plaintext passwords MUST NOT be stored, logged, compared in plaintext, or returned by any API response schema.
 - Validate and authorize user input on the server side; frontend restrictions alone are insufficient.
 - Apply appropriate input validation, error handling, and secure logging. Sensitive credentials and payment data MUST NOT appear in logs.
 - AI-generated code MUST NOT bypass existing authentication, authorization, or data-protection requirements.
@@ -96,6 +98,9 @@ All implementation MUST follow the established project architecture and technolo
 - Infrastructure: PostgreSQL 16 with PostGIS and Redis 7.
 - Use asynchronous programming appropriately. FastAPI async routes MUST NOT execute blocking I/O directly.
 - SQLAlchemy models SHOULD use typed mappings such as `Mapped[T]`.
+- The backend MUST use the asynchronous database stack end-to-end: `create_async_engine` + `async_sessionmaker` with a per-request async session dependency (`get_db`). Synchronous database access inside request handlers is prohibited.
+- PostgreSQL in production MUST connect through `asyncpg`; local development and test suites MUST connect through `aiosqlite`. Synchronous drivers such as `psycopg2` are permitted only inside Alembic migration tooling.
+- Blocking operations (`time.sleep`, synchronous HTTP clients, synchronous file or database I/O) MUST NOT appear inside `async` request handlers or services.
 - Prefer Next.js Server Components by default. Use `'use client'` only when browser APIs, state, hooks, or client-side interaction require it.
 - Keep responsibilities separated between API routes, services, data access, and presentation components.
 - Avoid unnecessary abstractions, duplicated business logic, and unrelated changes.
@@ -179,4 +184,4 @@ Passing local tests does not replace human review or CI validation.
 - AI Coding Agents MUST explain significant trade-offs and MUST NOT silently weaken security, food-safety, data-integrity, or testing requirements.
 - The Constitution SHOULD be reviewed whenever the architecture, technology stack, or core business rules change.
 
-**Version**: 1.0.0 | **Ratified**: Pending team approval | **Last Amended**: 2026-10-30
+**Version**: 1.1.0 | **Ratified**: Pending team approval | **Last Amended**: 2026-10-31
