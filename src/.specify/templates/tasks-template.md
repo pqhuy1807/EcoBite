@@ -9,7 +9,7 @@ description: "Task list template for feature implementation"
 
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: Test tasks are MANDATORY and are named FIRST inside each user story: Constitution Principle I (Test-First Development) is NON-NEGOTIABLE for EcoBite. Only the file paths and scenario lists can be adjusted to the feature. Additionally, the Final Verification Gate phase MUST be present and all-pasing before any task list can be considered complete.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -22,7 +22,8 @@ description: "Task list template for feature implementation"
 ## Path Conventions
 
 - **Single project**: `src/`, `tests/` at repository root
-- **Web app**: `backend/src/`, `frontend/src/`
+- **Web app (upstream default)**: `backend/src/`, `frontend/src/`
+- **EcoBite web app (actual layout - REQUIRED by Constitution)**: backend code in `backend/app/{api,core,db,models,schemas,services}`; backend tests in `backend/tests/unit/` and `backend/tests/integration/` (async SQLite fixtures from `backend/tests/conftest.py`); frontend code in `frontend/src/` with tests in `frontend/__tests__/{components,hooks}/`
 - **Mobile**: `api/src/`, `ios/src/` or `android/src/`
 - Paths shown below assume single project - adjust based on plan.md structure
 
@@ -157,6 +158,26 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
 - [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
+
+---
+
+## Final Phase: Verification Gate (Constitution Principle VIII) — MANDATORY
+
+**Purpose**: Reproducible evidence that every Quality Gate passed. All commands MUST exit 0 before proposing a commit. Do not mark tasks complete without executing them.
+
+### Backend (`backend/`, within the project venv)
+
+- [ ] TXXX `ruff check app/` — lint passes with zero findings
+- [ ] TXXX `ruff format --check app/` — formatting is canonical
+- [ ] TXXX `mypy app/` — static type-check passes with zero errors
+- [ ] TXXX `pytest tests/ -v` — the full suite passes with no regression
+
+### Frontend (`frontend/`)
+
+- [ ] TXXX `npm run lint` — lint passes with zero errors
+- [ ] TXXX `npm run type-check` — TypeScript compiles with zero errors
+
+> On Windows PowerShell invoke commands as `.\venv\Scripts\python.exe -m ruff ...` inside `backend/`. Report honest results only; any red check MUST be fixed and rerun (Auto-Fix Rule).
 
 ---
 

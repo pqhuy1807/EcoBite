@@ -8,6 +8,10 @@
 
 **Input**: User description: "$ARGUMENTS"
 
+## Summary *(mandatory)*
+
+[One paragraph: the problem, the primary user roles affected (CONSUMER / STORE_PARTNER / ADMIN), and the desired outcome. Extracted from the raw feature description without solutions or implementation detail]
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -97,6 +101,15 @@
 
 - **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
 - **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+
+### Non-Functional Requirements *(mandatory when the feature touches money, health, or personal data)*
+
+<!-- MUST be measurable and verifiable by an acceptance test. Defaults below mirror the EcoBite Constitution. -->
+
+- **NFR-001**: Performance: [e.g., API p95 latency < 200 ms under the expected load, or NEEDS CLARIFICATION]
+- **NFR-002**: Security: [e.g., endpoint protected by `require_roles(...)` with role from Constitution; JWT verified server-side; secrets and payment data never logged]
+- **NFR-003**: Integrity: [e.g., state-changing operation idempotent and safe to retry; race conditions handled at the transaction level]
+- **NFR-004**: Observability: [e.g., structured log lines with enough context to triage; errors surfaced via accurate status codes]
 
 ### Key Entities *(include if feature involves data)*
 
