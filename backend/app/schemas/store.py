@@ -8,6 +8,26 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.store import KycStatus
 
+from typing import Optional
+from uuid import UUID
+
+class StoreOnboardRequest(BaseModel):
+    name: str = Field(..., example="Tiệm Bánh Mì & Cơm Trưa Sài Gòn")
+    description: Optional[str] = None
+    address: str
+    latitude: float
+    longitude: float
+    phone: str
+    kyc_license_url: str
+
+class StoreResponse(BaseModel):
+    id: UUID
+    name: str
+    kyc_status: str
+    message: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class StoreBase(BaseModel):
     """Base fields shared across store requests and responses."""
