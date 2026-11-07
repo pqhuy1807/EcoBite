@@ -28,10 +28,11 @@ flowchart TD
         NginxGateway["Reverse Proxy / SSL / CORS\n(Port 80/443)"]
     end
 
-    subgraph BackendLayer ["Backend Application (FastAPI Asynchronous Runtime)"]
-        APIEndpoints["FastAPI Routers (/api/v1)\n- /auth, /stores, /dishes, /recommendations\n- /orders, /payments/vnpay, /ml, /green-points"]
-        CoreMiddleware["Core Services & Middlewares\n- JWT RBAC Guard (Dual Tokens)\n- Rule-based Discount Calculator\n- Inventory Atomic Lock Engine\n- Dynamic HMAC-SHA256 QR Signer\n- VNPay IPN Webhook Idempotent Handler\n- Google GenAI Client (Gemini 2.5 Flash)"]
-        DBSession["Async SQLAlchemy 2.0 Engine\n(asyncpg connection pool)"]
+    subgraph BackendLayer ["Backend Application (FastAPI 3-Tier Clean Architecture)"]
+        APIEndpoints["Layer 1: FastAPI Routers (/api/v1/endpoints)\n- /auth, /users, /stores, /menu-items, /dishes\n- /recommendations, /orders, /payments/vnpay, /ml"]
+        CoreMiddleware["Layer 2: Domain Services (app/services)\n- JWT RBAC Guard & Auth Service\n- Store KYC & Spatial Discovery Service\n- Rule-based Time-Shift Discount Engine\n- Dynamic HMAC-SHA256 QR Signer & VNPay Handler\n- Google GenAI Client (Gemini 2.5 Flash)"]
+        DataRepos["Layer 3: Data Repositories (app/repositories)\n- user_repo, store_repo, menu_repo, dish_repo\n- Atomic Inventory Decrement (Anti-Overselling)\n- PostGIS WKT / Spatial Query Encapsulation"]
+        DBSession["Async SQLAlchemy 2.0 Engine\n(asyncpg / aiosqlite connection pool)"]
     end
 
     subgraph DataLayer ["Data & Cache Layer (Docker Compose)"]
@@ -47,12 +48,23 @@ flowchart TD
     ClientLayer -->|HTTPS / REST / WSS| NginxGateway
     NginxGateway --> APIEndpoints
     APIEndpoints --> CoreMiddleware
-    CoreMiddleware --> DBSession
+    CoreMiddleware --> DataRepos
+    DataRepos --> DBSession
     DBSession --> PostgreSQL
     APIEndpoints --> RedisStore
     CoreMiddleware -->|Google GenAI SDK| GeminiNLP
     APIEndpoints <-->|Redirect & IPN Webhook| VNPayGateway
 ```
+
+### 1.1. Kiến trúc Phân tầng Backend (`Router ➔ Service ➔ Repository`)
+
+Để đảm bảo nguyên tắc **Single Responsibility Principle (SRP)** và dễ dàng kiểm thử độc lập (Unit Test / Integration Test), toàn bộ mã nguồn Backend trong `backend/app/` được phân tách nghiêm ngặt thành 3 tầng:
+
+| Tầng (Layer) | Thư mục | Trách nhiệm cốt lõi |
+| :--- | :--- | :--- |
+| **1. Presentation / Router Layer** | `backend/app/api/v1/endpoints/` | Tiếp nhận HTTP Request, xác thực phân quyền RBAC (`require_roles`), chuẩn hóa dữ liệu đầu vào/đầu ra qua Pydantic v2 Schemas và gọi xuống tầng Service. Tuyệt đối không viết câu lệnh truy vấn SQL tại Router. |
+| **2. Business / Service Layer** | `backend/app/services/` | Chứa toàn bộ quy tắc nghiệp vụ cốt lõi: Động cơ tính giá giảm giờ chót (`DishService`), đối chiếu Menu Grounding (`MenuService`), kiểm duyệt KYC (`StoreService`), tính khoảng cách không gian (`DiscoveryService`). Điều phối dữ liệu thông qua tầng Repository. |
+| **3. Data Access / Repository Layer** | `backend/app/repositories/` | Các module `user_repo.py`, `store_repo.py`, `menu_repo.py`, `dish_repo.py` làm việc trực tiếp với `AsyncSession` (SQLAlchemy 2.0), đóng gói toàn bộ truy vấn CRUD, xử lý tọa độ WKT/PostGIS và thực thi cập nhật tồn kho nguyên tử (`atomic_decrement_quantity`). |
 
 ---
 

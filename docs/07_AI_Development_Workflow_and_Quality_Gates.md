@@ -49,18 +49,28 @@ Trong dự án EcoBite, chúng ta không tin tưởng code một cách mù quán
 
 ---
 
-## 2. Chuẩn bị Thư mục Tests cho Dự án
+## 2. Cấu trúc Phân tầng Backend & Thư mục Kiểm thử (3-Tier + TDD)
 
-Để sẵn sàng cho quy trình TDD, dự án sử dụng cấu trúc thư mục kiểm thử tiêu chuẩn sau:
+Để đảm bảo tính nhất quán giữa các thành viên và AI Coding Agents, dự án áp dụng kiến trúc 3 tầng (`Router ➔ Service ➔ Repository`) cùng cấu trúc thư mục kiểm thử tiêu chuẩn:
 
 ```text
 backend/
+├── app/
+│   ├── api/v1/endpoints/             # Layer 1: HTTP Routers & RBAC Guards (auth, users, stores, menu, dishes)
+│   ├── services/                     # Layer 2: Domain Business Logic (store_service, menu_service, dish_service, discovery)
+│   ├── repositories/                 # Layer 3: AsyncSession Data Access (user_repo, store_repo, menu_repo, dish_repo)
+│   ├── models/                       # SQLAlchemy 2.0 Mapped[T] ORM Entities
+│   └── schemas/                      # Pydantic v2 Request/Response Schemas
 └── tests/
     ├── conftest.py                   # Setup database test, Redis mock & JWT test fixtures
-    ├── unit/                         # Unit tests logic độc lập (tính giá, ký QR, điểm xanh)
-    │   └── .gitkeep
-    └── integration/                  # Integration tests gọi API và kết nối CSDL PostGIS thật
-        └── .gitkeep
+    ├── unit/                         # Unit tests logic độc lập & repository atomic queries
+    │   └── test_dish_service.py
+    └── integration/                  # Integration tests gọi API xuyên suốt Router -> Service -> Repo -> DB
+        ├── test_api_auth.py
+        ├── test_api_users.py
+        ├── test_api_stores.py
+        ├── test_api_discovery.py
+        └── test_api_menu_dishes.py
 
 frontend/
 └── __tests__/

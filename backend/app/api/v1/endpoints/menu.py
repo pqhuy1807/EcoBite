@@ -1,55 +1,83 @@
-from typing import Any, List
+"""Base Menu Catalog CRUD endpoints (/stores/{store_id}/menu-items and /menu-items/{item_id})."""
+
+from typing import Annotated, Any
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import DBSession, require_roles
+from app.models.user import User, UserRole
+from app.services.menu_service import MenuService
 
 router = APIRouter()
 
-@router.post("/stores/{store_id}/menu-items", status_code=status.HTTP_201_CREATED)
-def create_menu_item(store_id: UUID, item_in: dict) -> Any:
-    """
-    Thêm món vào danh mục gốc của cửa hàng.
-    """
-    return {
-        "id": "m1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
-        "store_id": str(store_id),
-        "name": item_in.get("name", "Cơm sườn bì chả"),
-        "category": item_in.get("category", "RICE"),
-        "original_price": item_in.get("original_price", 45000.0),
-        "image_url": item_in.get("image_url"),
-        "base_allergens": item_in.get("base_allergens", []),
-        "is_active": True
-    }
+
+@router.post(
+    "/stores/{store_id}/menu-items",
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_menu_item(
+    store_id: UUID,
+    item_in: dict[str, Any],
+    db: DBSession,
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.STORE_PARTNER, UserRole.ADMIN)),
+    ],
+) -> dict[str, Any]:
+    """Thêm món vào danh mục gốc của cửa hàng (chỉ chủ quán hoặc Admin)."""
+    service = MenuService(db)
+    owner_check_id = None if current_user.role == UserRole.ADMIN else current_user.id
+    return await service.create_menu_item(
+        store_id=store_id,
+        item_data=item_in,
+        current_user_id=owner_check_id,
+    )
+
 
 @router.get("/stores/{store_id}/menu-items")
-def get_store_menu_items(store_id: UUID) -> Any:
-    """
-    Lấy danh sách tất cả món trong thực đơn chuẩn của quán.
-    """
-    return {
-        "total": 1,
-        "items": [
-            {
-                "id": "m1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
-                "name": "Cơm sườn bì chả",
-                "description": "Cơm tấm truyền thống sườn nướng mật ong",
-                "category": "RICE",
-                "original_price": 45000.0,
-                "base_allergens": ["Eggs (Trứng)", "Fish (Cá/Nước mắm)"],
-                "is_active": True
-            }
-        ]
-    }
+async def get_store_menu_items(
+    store_id: UUID,
+    db: DBSession,
+) -> dict[str, Any]:
+    """Lấy danh sách tất cả món trong thực đơn chuẩn của quán."""
+    service = MenuService(db)
+    return await service.get_store_menu_items(store_id)
+
 
 @router.put("/menu-items/{item_id}")
-def update_menu_item(item_id: UUID, item_in: dict) -> Any:
-    """
-    Cập nhật thông tin món ăn gốc.
-    """
-    return {"message": "Cập nhật thông tin món ăn thành công", "item_id": str(item_id)}
+async def update_menu_item(
+    item_id: UUID,
+    item_in: dict[str, Any],
+    db: DBSession,
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.STORE_PARTNER, UserRole.ADMIN)),
+    ],
+) -> dict[str, Any]:
+    """Cập nhật thông tin món ăn gốc."""
+    service = MenuService(db)
+    owner_check_id = None if current_user.role == UserRole.ADMIN else current_user.id
+    return await service.update_menu_item(
+        item_id=item_id,
+        update_data=item_in,
+        current_user_id=owner_check_id,
+    )
+
 
 @router.delete("/menu-items/{item_id}")
-def delete_menu_item(item_id: UUID) -> Any:
-    """
-    Ẩn/Xóa mềm món khỏi thực đơn.
-    """
-    return {"message": "Xóa món khỏi thực đơn thành công", "item_id": str(item_id)}
+async def delete_menu_item(
+    item_id: UUID,
+    db: DBSession,
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.STORE_PARTNER, UserRole.ADMIN)),
+    ],
+) -> dict[str, Any]:
+    """Ẩn/Xóa mềm món khỏi thực đơn."""
+    service = MenuService(db)
+    owner_check_id = None if current_user.role == UserRole.ADMIN else current_user.id
+    return await service.delete_menu_item(
+        item_id=item_id,
+        current_user_id=owner_check_id,
+    )

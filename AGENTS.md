@@ -21,11 +21,15 @@ Mỗi khi người dùng yêu cầu thêm tính năng, sửa bug hoặc tái c�
 - Xác định rõ vai trò truy cập (Role: `CONSUMER`, `STORE_PARTNER`, `ADMIN`) và các trường hợp biên (Edge Cases: mạng lag, trùng đơn, toạ độ âm, hết hàng).
 
 ### Bước 2: Viết Kiểm thử Song song hoặc Trước (Test-First / TDD)
-- Mọi hàm nghiệp vụ mới trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/`.
+- Mọi thao tác dữ liệu trong `backend/app/repositories/`, hàm nghiệp vụ trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/`.
 - Mọi component có logic quan trọng hoặc hook trong `frontend/src/` phải có test trong `frontend/__tests__/`.
 
 ### Bước 3: Viết Mã Nguồn Tinh gọn (Clean Code Implementation)
-- **Backend**: Tuân thủ FastAPI async/await, Pydantic v2 validation, SQLAlchemy 2.0 type annotations (`Mapped[T]`), không dùng hàm đồng bộ (blocking I/O) trong async router.
+- **Backend (Kiến trúc 3 tầng `Router -> Service -> Repository`)**:
+  - `backend/app/api/v1/endpoints/`: Tầng HTTP Router (xử lý request/response, RBAC `require_roles`, không chứa câu lệnh SQL).
+  - `backend/app/services/`: Tầng Nghiệp vụ (xử lý logic tính giá giờ chót, kiểm tra quyền sở hữu, điều phối giao dịch, gọi xuống Repository).
+  - `backend/app/repositories/`: Tầng Truy xuất Dữ liệu (`*_repo.py`, chỉ chứa các câu lệnh truy vấn SQLAlchemy 2.0 `AsyncSession` và Atomic Update).
+  - Tuân thủ FastAPI async/await, Pydantic v2 validation, SQLAlchemy 2.0 type annotations (`Mapped[T]`), không dùng hàm đồng bộ (blocking I/O) trong async router.
 - **Frontend**: Next.js 14 App Router, Client Component chỉ đánh dấu `'use client'` khi có tương tác (state, hook, browser API), còn lại ưu tiên Server Components.
 - **Machine Learning**: Tuyệt đối không load model `.pt` trong request body. Sử dụng cơ chế Lifespan Singleton nạp từ `app.state.ml_model` với `torch.no_grad()`.
 
@@ -82,8 +86,14 @@ npm run type-check
 
 ## 3. Quy chuẩn Đặt tên File & Cấu trúc Thư mục
 
+- **Backend Application Layers (`Router -> Service -> Repository`)**:
+  - `backend/app/api/v1/endpoints/<domain>.py` (Tầng HTTP Router & RBAC)
+  - `backend/app/services/<domain>_service.py` (Tầng Business Logic)
+  - `backend/app/repositories/<domain>_repo.py` (Tầng Data Access / SQLAlchemy 2.0 AsyncSession)
+  - `backend/app/models/<domain>.py` (Tầng ORM Models)
+  - `backend/app/schemas/<domain>.py` (Tầng Pydantic v2 DTOs)
 - **Backend Tests**:
-  - `backend/tests/unit/test_<service_name>.py`
+  - `backend/tests/unit/test_<service_or_repo_name>.py`
   - `backend/tests/integration/test_api_<endpoint>.py`
   - `backend/tests/conftest.py` (Chứa fixtures CSDL test, mock Redis, fake JWT tokens)
 - **Frontend Tests**:
