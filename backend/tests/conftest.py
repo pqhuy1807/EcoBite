@@ -15,9 +15,12 @@ from sqlalchemy.pool import StaticPool
 # Importing the model modules registers every ORM class on `Base.metadata`
 # so create_all() can build the full test schema.
 import app.models as _models  # noqa: F401
+from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models.store import KycStatus, Store
+from app.models.user import User, UserRole
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -63,3 +66,57 @@ async def client(override_get_db) -> AsyncIterator[AsyncClient]:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as async_client:
         yield async_client
+
+
+@pytest.fixture
+async def store_partner(db_session: AsyncSession) -> dict[str, object]:
+    """Persist an approved merchant account and provide its authenticated API headers."""
+    user = User(
+        email="merchant@ecobite.vn",
+        hashed_password="not-used-by-tests",
+        full_name="Merchant",
+        role=UserRole.STORE_PARTNER,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    store = Store(
+        owner_id=user.id,
+        name="Test Store",
+        address="123 Test Street",
+        location="POINT(106.7 10.77)",
+        kyc_status=KycStatus.APPROVED,
+    )
+    db_session.add(store)
+    await db_session.commit()
+    return {
+        "user": user,
+        "store": store,
+        "headers": {"Authorization": f"Bearer {create_access_token(user.id)}"},
+    }
+
+
+@pytest.fixture
+async def other_store_partner(db_session: AsyncSession) -> dict[str, object]:
+    """Persist a second merchant to exercise cross-store authorization."""
+    user = User(
+        email="other-merchant@ecobite.vn",
+        hashed_password="not-used-by-tests",
+        full_name="Other Merchant",
+        role=UserRole.STORE_PARTNER,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    store = Store(
+        owner_id=user.id,
+        name="Other Store",
+        address="456 Test Street",
+        location="POINT(106.8 10.8)",
+        kyc_status=KycStatus.APPROVED,
+    )
+    db_session.add(store)
+    await db_session.commit()
+    return {
+        "user": user,
+        "store": store,
+        "headers": {"Authorization": f"Bearer {create_access_token(user.id)}"},
+    }

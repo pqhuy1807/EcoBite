@@ -1,50 +1,64 @@
-from typing import List, Optional
-from uuid import UUID
-from sqlalchemy.orm import Session
+"""Business logic for a store's canonical menu catalog."""
+
+import uuid
+
 from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.menu_item import MenuItem
+from app.models.store import KycStatus, Store
+
 
 class MenuService:
-    def __init__(self, db: Session):
+    """Create, read and maintain canonical menu items."""
+
+    def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    def get_store_menu_items(self, store_id: UUID) -> List[dict]:
-        """
-        Lấy danh sách các món ăn trong thực đơn gốc của cửa hàng.
-        """
-        # return self.db.query(MenuItem).filter(MenuItem.store_id == store_id, MenuItem.is_active == True).all()
-        return []
+    async def get_store_menu_items(self, store_id: uuid.UUID) -> list[MenuItem]:
+        store = await self.db.get(Store, store_id)
+        if store is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        result = await self.db.execute(
+            select(MenuItem)
+            .where(MenuItem.store_id == store_id, MenuItem.is_active.is_(True))
+            .order_by(MenuItem.created_at, MenuItem.id)
+        )
+        return list(result.scalars().all())
 
-    def create_menu_item(self, store_id: UUID, item_data: dict) -> dict:
-        """
-        Thêm món ăn mới vào danh mục thực đơn chuẩn của quán.
-        """
-        if item_data.get("original_price", 0) <= 0:
+    async def create_menu_item(self, store_id: uuid.UUID, item_data: dict) -> MenuItem:
+        store = await self.db.get(Store, store_id)
+        if store is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        if store.kyc_status != KycStatus.APPROVED:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Giá gốc của món ăn phải lớn hơn 0"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Store KYC must be approved before managing its menu",
             )
 
-        new_item = {
-            "id": "m1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
-            "store_id": str(store_id),
-            "name": item_data.get("name"),
-            "category": item_data.get("category"),
-            "original_price": item_data.get("original_price"),
-            "image_url": item_data.get("image_url"),
-            "base_allergens": item_data.get("base_allergens", []),
-            "standard_ingredients": item_data.get("standard_ingredients", []),
-            "is_active": True
-        }
-        return new_item
+        item = MenuItem(store_id=store_id, **item_data)
+        self.db.add(item)
+        await self.db.commit()
+        await self.db.refresh(item)
+        return item
 
-    def update_menu_item(self, item_id: UUID, store_id: UUID, update_data: dict) -> dict:
-        """
-        Cập nhật thông tin món ăn gốc.
-        """
-        return {"id": str(item_id), "status": "updated"}
+    async def update_menu_item(self, item_id: uuid.UUID, update_data: dict) -> MenuItem:
+        item = await self.db.get(MenuItem, item_id)
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found")
+        if update_data:
+            for field, value in update_data.items():
+                setattr(item, field, value)
+            await self.db.commit()
+            await self.db.refresh(item)
+        return item
 
-    def delete_menu_item(self, item_id: UUID, store_id: UUID) -> bool:
-        """
-        Ẩn/Xóa mềm món khỏi thực đơn chuẩn.
-        """
-        return True
+    async def delete_menu_item(self, item_id: uuid.UUID) -> MenuItem:
+        item = await self.db.get(MenuItem, item_id)
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found")
+        item.is_active = False
+        await self.db.commit()
+        await self.db.refresh(item)
+        return item

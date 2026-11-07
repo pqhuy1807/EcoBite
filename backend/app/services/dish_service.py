@@ -1,109 +1,278 @@
+"""Business logic for surplus meal listings and deterministic discounts."""
+
+import uuid
 from datetime import datetime, time, timedelta
-from typing import Optional, Tuple, List
-from uuid import UUID
-from sqlalchemy.orm import Session
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
+
 from fastapi import HTTPException, status
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.dish import Dish, DishStatus
+from app.models.menu_item import MenuItem
+from app.models.store import KycStatus, Store
+
 
 class DishService:
-    """
-    Service quản lý Suất ăn dư thừa (Dishes) và Động cơ Giảm giá Khung giờ Tất định
-    (Rule-Based Time-Shift Engine - Inviolable Guardrail #5).
-    """
-    def __init__(self, db: Session):
+    """Manage rescue listings and time-based pricing."""
+
+    def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
     @staticmethod
     def calculate_time_shifted_discount(
-        original_price: float,
+        original_price: Decimal | float,
         pickup_start_time: time,
         pickup_end_time: time,
-        override_discounted_price: Optional[float] = None,
-        current_time: Optional[datetime] = None
-    ) -> Tuple[float, float, bool]:
-        """
-        Thuật toán tính giá giảm giờ chót tất định:
-        - Giờ vàng giải cứu (Standard Window): Giảm 40% - 50%.
-        - Giờ chót xả hàng (Final Rush - 30 đến 45 phút trước pickup_end_time): Giảm 60% - 70%.
-        - Giá ghi đè thủ công (override_discounted_price): Ưu tiên nếu chủ quán chủ động nhập.
-        """
-        if override_discounted_price is not None and override_discounted_price > 0:
-            rescue_price = override_discounted_price
-            rule_discount_price = round(original_price * 0.3, -2) # Giảm 70%
-            return rescue_price, rule_discount_price, False
+        override_discounted_price: Decimal | float | None = None,
+        current_time: datetime | time | None = None,
+        rule_discount_start_time: time | None = None,
+    ) -> tuple[Decimal, Decimal, bool]:
+        """Return active price, 70%-discount price and whether the rush price applies."""
+        price = Decimal(str(original_price))
+        rush_price = (price * Decimal("0.30")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if override_discounted_price is not None:
+            override = Decimal(str(override_discounted_price))
+            if override <= 0 or override > price:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Override price must be greater than zero and no higher than original price"
+                    ),
+                )
+            return override, rush_price, False
 
-        rescue_price = round(original_price * 0.5, -2)
-        rule_discount_price = round(original_price * 0.3, -2)
+        rescue_price = (price * Decimal("0.50")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        now = current_time.time() if isinstance(current_time, datetime) else current_time
+        if now is None:
+            now = datetime.now().time()
+        default_rush_start = max(
+            pickup_start_time,
+            (datetime.combine(datetime.today(), pickup_end_time) - timedelta(minutes=45)).time(),
+        )
+        rush_start = rule_discount_start_time or default_rush_start
+        rush_active = rush_start <= now <= pickup_end_time
+        return (rush_price if rush_active else rescue_price), rush_price, rush_active
 
-        now = current_time.time() if current_time else datetime.now().time()
+    async def create_surplus_dish(
+        self, menu_item_id: uuid.UUID, dish_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        menu_item = await self.db.get(MenuItem, menu_item_id)
+        if menu_item is None or not menu_item.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Active menu item not found",
+            )
+        store = await self.db.get(Store, menu_item.store_id)
+        if store is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        self._ensure_store_approved(store)
+        dish = self._build_dish(
+            menu_item,
+            dish_data,
+            dish_data["pickup_start_time"],
+            dish_data["pickup_end_time"],
+            dish_data.get("rule_discount_start_time"),
+        )
+        self.db.add(dish)
+        await self.db.commit()
+        await self.db.refresh(dish)
+        return self.serialize_dish(dish)
 
-        dummy_date = datetime.today()
-        dt_end = datetime.combine(dummy_date, pickup_end_time)
-        dt_rush_start = dt_end - timedelta(minutes=45)
-        rush_start_time = dt_rush_start.time()
+    async def batch_create_dishes(
+        self,
+        dish_items: list[dict[str, Any]],
+        pickup_start_time: time,
+        pickup_end_time: time,
+        rule_discount_start_time: time | None = None,
+    ) -> list[dict[str, Any]]:
+        """Create a batch in one transaction, requiring all items to belong to one store."""
+        menu_items: list[MenuItem] = []
+        for item in dish_items:
+            menu_item = await self.db.get(MenuItem, item["menu_item_id"])
+            if menu_item is None or not menu_item.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Active menu item not found",
+                )
+            menu_items.append(menu_item)
 
-        is_rule_discount_active = False
-        if rush_start_time <= now <= pickup_end_time:
-            is_rule_discount_active = True
-            current_active_price = rule_discount_price
-        else:
-            current_active_price = rescue_price
+        store_id = menu_items[0].store_id
+        if any(item.store_id != store_id for item in menu_items):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="All menu items in a batch must belong to the same store",
+            )
+        store = await self.db.get(Store, store_id)
+        if store is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        self._ensure_store_approved(store)
 
-        return current_active_price, rule_discount_price, is_rule_discount_active
+        dishes = [
+            self._build_dish(
+                menu_item,
+                {**item_data, "total_quantity": item_data["quantity"]},
+                pickup_start_time,
+                pickup_end_time,
+                rule_discount_start_time,
+            )
+            for menu_item, item_data in zip(menu_items, dish_items, strict=False)
+        ]
+        self.db.add_all(dishes)
+        await self.db.commit()
+        for dish in dishes:
+            await self.db.refresh(dish)
+        return [self.serialize_dish(dish) for dish in dishes]
 
-    def create_surplus_dish(self, store_id: UUID, dish_data: dict) -> dict:
-        """
-        Kích hoạt và đăng bán suất ăn dư thừa cuối ca.
-        """
-        orig_price = dish_data.get("original_price", 0.0)
-        p_start = dish_data.get("pickup_start_time")
-        p_end = dish_data.get("pickup_end_time")
+    @staticmethod
+    def _ensure_store_approved(store: Store) -> None:
+        if store.kyc_status != KycStatus.APPROVED:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Store KYC must be approved before publishing dishes",
+            )
 
-        current_price, rule_price, is_active = self.calculate_time_shifted_discount(
-            original_price=orig_price,
-            pickup_start_time=p_start,
-            pickup_end_time=p_end,
-            override_discounted_price=dish_data.get("override_discounted_price")
+    @staticmethod
+    def _build_dish(
+        menu_item: MenuItem,
+        dish_data: dict[str, Any],
+        pickup_start: time,
+        pickup_end: time,
+        rule_discount_start: time | None,
+    ) -> Dish:
+        if pickup_end <= pickup_start:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Pickup end time must be after pickup start time",
+            )
+        original_price = Decimal(menu_item.original_price)
+        rule_start = rule_discount_start or max(
+            pickup_start,
+            (datetime.combine(datetime.today(), pickup_end) - timedelta(minutes=45)).time(),
+        )
+        rescue_price = (original_price * Decimal("0.50")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        rule_price = (original_price * Decimal("0.30")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        override_price = dish_data.get("override_discounted_price")
+        if override_price is not None and (override_price <= 0 or override_price > original_price):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Override price must be greater than zero and no higher than original price"
+                ),
+            )
+        explicit_allergens = [
+            {"allergen": allergen, "risk_level": "HIGH", "source": "EXPLICIT"}
+            for allergen in menu_item.base_allergens
+        ]
+        explicit_allergens.extend(dish_data.get("allergens", []))
+        total_quantity = dish_data.get("total_quantity", dish_data.get("quantity"))
+        remaining_quantity = dish_data.get("remaining_quantity")
+        if remaining_quantity is None:
+            remaining_quantity = total_quantity
+        dish_status = DishStatus.SOLD_OUT if remaining_quantity == 0 else DishStatus.ACTIVE
+        return Dish(
+            store_id=menu_item.store_id,
+            menu_item_id=menu_item.id,
+            name=menu_item.name,
+            description=menu_item.description,
+            category=menu_item.category,
+            image_url=menu_item.image_url,
+            original_price=original_price,
+            rescue_price=rescue_price,
+            rule_discount_price=rule_price,
+            override_discounted_price=override_price,
+            pickup_start_time=pickup_start,
+            pickup_end_time=pickup_end,
+            rule_discount_start_time=rule_start,
+            total_quantity=total_quantity,
+            remaining_quantity=remaining_quantity,
+            status=dish_status,
+            ingredients=menu_item.standard_ingredients,
+            allergens=explicit_allergens,
+            dietary_notes=dish_data.get("dietary_notes", []),
+            dietary_type=menu_item.dietary_type,
         )
 
+    async def get_active_store_dishes(self, store_id: uuid.UUID) -> list[dict[str, Any]]:
+        store = await self.db.get(Store, store_id)
+        if store is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+        result = await self.db.execute(
+            select(Dish)
+            .where(Dish.store_id == store_id, Dish.status == DishStatus.ACTIVE)
+            .order_by(Dish.created_at, Dish.id)
+        )
+        return [self.serialize_dish(dish) for dish in result.scalars().all()]
+
+    async def update_dish_quantity(self, dish_id: uuid.UUID, quantity: int) -> dict[str, Any]:
+        dish = await self.db.get(Dish, dish_id)
+        if dish is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dish not found")
+        if quantity > dish.total_quantity:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Quantity cannot exceed the originally published amount",
+            )
+        new_status = DishStatus.SOLD_OUT if quantity == 0 else DishStatus.ACTIVE
+        result = await self.db.execute(
+            update(Dish)
+            .where(Dish.id == dish_id, Dish.total_quantity >= quantity)
+            .values(remaining_quantity=quantity, status=new_status)
+        )
+        if result.rowcount != 1:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Dish quantity changed concurrently; reload and retry",
+            )
+        await self.db.commit()
+        await self.db.refresh(dish)
         return {
-            "id": "d7a1b3c9-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
-            "store_id": str(store_id),
-            "menu_item_id": str(dish_data.get("menu_item_id")),
-            "name": dish_data.get("name"),
-            "original_price": orig_price,
-            "current_price": current_price,
-            "rule_discount_price": rule_price,
-            "is_rule_discount_active": is_active,
-            "total_quantity": dish_data.get("total_quantity"),
-            "remaining_quantity": dish_data.get("total_quantity"),
-            "pickup_start_time": str(p_start),
-            "pickup_end_time": str(p_end),
-            "status": "AVAILABLE"
+            "dish_id": dish.id,
+            "remaining_quantity": dish.remaining_quantity,
+            "status": dish.status,
         }
 
-    def batch_create_dishes(self, store_id: UUID, batch_data: dict) -> dict:
-        """
-        Đăng hàng loạt món dư cuối ca (1-Tap Batch Post).
-        """
-        created_dishes = []
-        p_start = batch_data.get("pickup_start_time")
-        p_end = batch_data.get("pickup_end_time")
-
-        for item in batch_data.get("dishes", []):
-            curr_price, rule_price, _ = self.calculate_time_shifted_discount(
-                original_price=45000.0,
-                pickup_start_time=p_start,
-                pickup_end_time=p_end,
-                override_discounted_price=item.get("override_discounted_price")
-            )
-            created_dishes.append({
-                "id": "generated-uuid-dish",
-                "name": item.get("name"),
-                "remaining_quantity": item.get("quantity"),
-                "current_price": curr_price
-            })
-
+    @classmethod
+    def serialize_dish(cls, dish: Dish) -> dict[str, Any]:
+        """Serialize a listing with the price currently active under the rush rule."""
+        current_price, _, rush_active = cls.calculate_time_shifted_discount(
+            original_price=dish.original_price,
+            pickup_start_time=dish.pickup_start_time,
+            pickup_end_time=dish.pickup_end_time,
+            override_discounted_price=dish.override_discounted_price,
+            rule_discount_start_time=dish.rule_discount_start_time,
+        )
         return {
-            "created_count": len(created_dishes),
-            "dishes": created_dishes
+            "id": dish.id,
+            "store_id": dish.store_id,
+            "menu_item_id": dish.menu_item_id,
+            "name": dish.name,
+            "description": dish.description,
+            "category": dish.category,
+            "original_price": dish.original_price,
+            "rescue_price": dish.rescue_price,
+            "rule_discount_price": dish.rule_discount_price,
+            "override_discounted_price": dish.override_discounted_price,
+            "current_price": current_price,
+            "is_rule_discount_active": rush_active,
+            "pickup_start_time": dish.pickup_start_time,
+            "pickup_end_time": dish.pickup_end_time,
+            "rule_discount_start_time": dish.rule_discount_start_time,
+            "image_url": dish.image_url,
+            "ingredients": dish.ingredients,
+            "allergens": dish.allergens,
+            "dietary_notes": dish.dietary_notes,
+            "dietary_type": dish.dietary_type,
+            "estimated_co2_kg_per_dish": dish.estimated_co2_kg_per_dish,
+            "total_quantity": dish.total_quantity,
+            "remaining_quantity": dish.remaining_quantity,
+            "status": dish.status,
+            "created_at": dish.created_at,
+            "updated_at": dish.updated_at,
         }

@@ -1,55 +1,64 @@
-from typing import Any, List
-from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+"""Store-owned menu catalog endpoints."""
+
+import uuid
+
+from fastapi import APIRouter, status
+
+from app.api.deps import DBSession, StoreOwner
+from app.models.menu_item import MenuItem
+from app.schemas.menu_item import MenuItemBase, MenuItemResponse, MenuItemUpdate
+from app.services.menu_service import MenuService
 
 router = APIRouter()
 
-@router.post("/stores/{store_id}/menu-items", status_code=status.HTTP_201_CREATED)
-def create_menu_item(store_id: UUID, item_in: dict) -> Any:
-    """
-    Thêm món vào danh mục gốc của cửa hàng.
-    """
-    return {
-        "id": "m1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
-        "store_id": str(store_id),
-        "name": item_in.get("name", "Cơm sườn bì chả"),
-        "category": item_in.get("category", "RICE"),
-        "original_price": item_in.get("original_price", 45000.0),
-        "image_url": item_in.get("image_url"),
-        "base_allergens": item_in.get("base_allergens", []),
-        "is_active": True
-    }
+
+@router.post(
+    "/stores/{store_id}/menu-items",
+    response_model=MenuItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_menu_item(
+    store_id: uuid.UUID,
+    item_in: MenuItemBase,
+    db: DBSession,
+    _: StoreOwner,
+) -> MenuItem:
+    """Add a canonical menu item to an approved store."""
+    return await MenuService(db).create_menu_item(
+        store_id, item_in.model_dump(exclude={"is_active"})
+    )
+
 
 @router.get("/stores/{store_id}/menu-items")
-def get_store_menu_items(store_id: UUID) -> Any:
-    """
-    Lấy danh sách tất cả món trong thực đơn chuẩn của quán.
-    """
+async def get_store_menu_items(
+    store_id: uuid.UUID,
+    db: DBSession,
+    _: StoreOwner,
+) -> dict[str, object]:
+    """List active canonical menu items belonging to the authenticated store."""
+    items = await MenuService(db).get_store_menu_items(store_id)
     return {
-        "total": 1,
-        "items": [
-            {
-                "id": "m1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
-                "name": "Cơm sườn bì chả",
-                "description": "Cơm tấm truyền thống sườn nướng mật ong",
-                "category": "RICE",
-                "original_price": 45000.0,
-                "base_allergens": ["Eggs (Trứng)", "Fish (Cá/Nước mắm)"],
-                "is_active": True
-            }
-        ]
+        "total": len(items),
+        "items": [MenuItemResponse.model_validate(item) for item in items],
     }
 
-@router.put("/menu-items/{item_id}")
-def update_menu_item(item_id: UUID, item_in: dict) -> Any:
-    """
-    Cập nhật thông tin món ăn gốc.
-    """
-    return {"message": "Cập nhật thông tin món ăn thành công", "item_id": str(item_id)}
 
-@router.delete("/menu-items/{item_id}")
-def delete_menu_item(item_id: UUID) -> Any:
-    """
-    Ẩn/Xóa mềm món khỏi thực đơn.
-    """
-    return {"message": "Xóa món khỏi thực đơn thành công", "item_id": str(item_id)}
+@router.put("/menu-items/{item_id}", response_model=MenuItemResponse)
+async def update_menu_item(
+    item_id: uuid.UUID,
+    item_in: MenuItemUpdate,
+    db: DBSession,
+    _: StoreOwner,
+) -> MenuItem:
+    """Update an owned menu item."""
+    return await MenuService(db).update_menu_item(item_id, item_in.model_dump(exclude_unset=True))
+
+
+@router.delete("/menu-items/{item_id}", response_model=MenuItemResponse)
+async def delete_menu_item(
+    item_id: uuid.UUID,
+    db: DBSession,
+    _: StoreOwner,
+) -> MenuItem:
+    """Soft-delete an owned menu item from the active catalog."""
+    return await MenuService(db).delete_menu_item(item_id)

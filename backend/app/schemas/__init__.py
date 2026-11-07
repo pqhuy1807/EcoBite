@@ -3,7 +3,11 @@
 from app.schemas.dish import (
     AllergenWarning,
     DishBase,
+    DishBatchItem,
+    DishBatchPublish,
     DishCreate,
+    DishPublish,
+    DishQuantityUpdate,
     DishResponse,
     DishUpdate,
 )
@@ -79,6 +83,10 @@ __all__ = [
     "AllergenWarning",
     "DishBase",
     "DishCreate",
+    "DishBatchItem",
+    "DishBatchPublish",
+    "DishPublish",
+    "DishQuantityUpdate",
     "DishUpdate",
     "DishResponse",
     "OrderBase",
