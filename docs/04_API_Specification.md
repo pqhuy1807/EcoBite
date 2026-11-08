@@ -117,7 +117,7 @@
 
 ### 2.1. Thêm Món vào Thực đơn Chuẩn của Quán (Menu Catalog)
 - **Method & Path**: `POST /stores/{store_id}/menu-items`
-- **Quyền hạn**: `STORE_PARTNER` (Cửa hàng đã được duyệt KYC)
+- **Quyền hạn**: Chủ cửa hàng (`STORE_PARTNER`), cửa hàng đã được duyệt KYC.
 - **Request Body**:
   ```json
   {
@@ -131,34 +131,38 @@
     "dietary_type": "NON_VEGAN"
   }
   ```
+- **Quản lý danh mục**:
+  - `GET /stores/{store_id}/menu-items`: Liệt kê các món đang hoạt động.
+  - `PUT /menu-items/{item_id}`: Cập nhật các trường được gửi lên.
+  - `DELETE /menu-items/{item_id}`: Xóa mềm món khỏi danh sách đang hoạt động.
+  - Các thao tác yêu cầu JWT của chính chủ cửa hàng; truy cập cửa hàng khác trả về `403`.
 
 ### 2.2. Đăng Bán Món Dư Cuối Ca Thủ Công (Create Surplus Dish)
 - **Method & Path**: `POST /dishes`
-- **Quyền hạn**: `STORE_PARTNER`
+- **Quyền hạn**: Chủ cửa hàng (`STORE_PARTNER`) có KYC đã duyệt.
 - **Request Body**:
   ```json
   {
     "menu_item_id": "m1a2b3c4-...",
-    "name": "Cơm sườn bì chả",
-    "category": "RICE",
-    "original_price": 45000.0,
-    "rescue_price": 22000.0,
-    "rule_discount_price": 13500.0,
+    "total_quantity": 5,
     "pickup_start_time": "14:00:00",
     "pickup_end_time": "15:00:00",
-    "rule_discount_start_time": "14:30:00",
-    "total_quantity": 5,
+    "override_discounted_price": null,
     "allergens": [
-      {"allergen": "Eggs (Trứng)", "risk_level": "HIGH", "source": "INFERRED", "reason": "Chả có trứng"},
-      {"allergen": "Fish (Cá)", "risk_level": "HIGH", "source": "INFERRED", "reason": "Nước mắm làm từ cá"}
+      {"allergen": "Sesame (Mè)", "risk_level": "HIGH", "source": "EXPLICIT", "reason": "Có mè rang"}
     ],
     "dietary_notes": ["Có mỡ hành (Allium)", "Có dưa chua"]
   }
   ```
+- Tên, mô tả, danh mục, ảnh, giá gốc, thành phần, chế độ ăn và dị ứng cơ sở được kế thừa từ `menu_item_id`; giá đăng bán được tính tự động (giảm 50% chuẩn, 70% trong 45 phút cuối). `pickup_end_time` phải sau `pickup_start_time` và số lượng phải lớn hơn 0.
+- **Quản lý suất ăn**:
+  - `GET /stores/{store_id}/dishes/active`: Liệt kê suất đang mở bán.
+  - `PATCH /dishes/{dish_id}/quantity` với `{"quantity": 0}`: Cập nhật số lượng còn lại; không nhận số âm hoặc vượt số lượng ban đầu.
+  - Các thao tác yêu cầu JWT của chính chủ cửa hàng.
 
 ### 2.3. Đăng Hàng Loạt Món Dư sau khi Duyệt Draft Cards (1-Tap Batch Post)
 - **Method & Path**: `POST /dishes/batch`
-- **Quyền hạn**: `STORE_PARTNER`
+- **Quyền hạn**: Chủ cửa hàng (`STORE_PARTNER`) có KYC đã duyệt; các món phải thuộc cùng một cửa hàng.
 - **Request Body**:
   ```json
   {
@@ -199,6 +203,7 @@
     ]
   }
   ```
+- Các món được đối chiếu từ danh mục gốc; toàn bộ batch được ghi trong một giao dịch và phải thuộc cùng một cửa hàng.
 
 ---
 

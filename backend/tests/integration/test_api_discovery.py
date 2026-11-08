@@ -57,13 +57,22 @@ async def _setup_approved_store_with_dish(
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    await client.post(
-        "/api/v1/dishes",
+    menu_resp = await client.post(
+        f"/api/v1/stores/{store_id}/menu-items",
         json={
-            "store_id": store_id,
             "name": dish_name,
             "category": category,
             "original_price": 45000.0,
+            "image_url": "https://cdn.ecobite.vn/menu/sample.jpg",
+        },
+        headers={"Authorization": f"Bearer {partner_token}"},
+    )
+    menu_item_id = menu_resp.json()["id"]
+
+    await client.post(
+        "/api/v1/dishes",
+        json={
+            "menu_item_id": menu_item_id,
             "pickup_start_time": "14:00:00",
             "pickup_end_time": "22:00:00",
             "total_quantity": 5,

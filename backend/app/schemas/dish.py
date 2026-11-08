@@ -5,7 +5,7 @@ from datetime import datetime, time
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.dish import DishStatus
 from app.models.menu_item import DietaryType, ItemCategory
@@ -68,6 +68,70 @@ class DishCreate(DishBase):
     total_quantity: int = Field(..., gt=0, description="Tổng số suất mở bán ban đầu")
 
 
+class DishPublish(BaseModel):
+    """Fields required to publish surplus stock grounded in a menu item."""
+
+    menu_item_id: uuid.UUID
+    total_quantity: int = Field(..., gt=0)
+    remaining_quantity: int | None = Field(default=None, ge=0)
+    pickup_start_time: time
+    pickup_end_time: time
+    rule_discount_start_time: time | None = None
+    override_discounted_price: Decimal | None = Field(default=None, gt=Decimal(0))
+    allergens: list[AllergenWarning] = Field(default_factory=list)
+    dietary_notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_pickup_window(self) -> "DishPublish":
+        if self.pickup_end_time <= self.pickup_start_time:
+            raise ValueError("Pickup end time must be after pickup start time")
+        if (
+            self.rule_discount_start_time is not None
+            and not self.pickup_start_time <= self.rule_discount_start_time <= self.pickup_end_time
+        ):
+            raise ValueError("Rule discount start time must be within the pickup window")
+        if self.remaining_quantity is not None and self.remaining_quantity > self.total_quantity:
+            raise ValueError("Remaining quantity cannot exceed total quantity")
+        return self
+
+
+class DishQuantityUpdate(BaseModel):
+    """Set the number of portions currently available for sale."""
+
+    quantity: int = Field(..., ge=0)
+
+
+class DishBatchItem(BaseModel):
+    """A menu-grounded dish within a batch publication."""
+
+    menu_item_id: uuid.UUID
+    quantity: int = Field(..., gt=0)
+    remaining_quantity: int | None = Field(default=None, ge=0)
+    override_discounted_price: Decimal | None = Field(default=None, gt=Decimal(0))
+    allergens: list[AllergenWarning] = Field(default_factory=list)
+    dietary_notes: list[str] = Field(default_factory=list)
+
+
+class DishBatchPublish(BaseModel):
+    """Shared pickup window and non-empty set of items for batch publication."""
+
+    pickup_start_time: time
+    pickup_end_time: time
+    rule_discount_start_time: time | None = None
+    dishes: list[DishBatchItem] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def validate_pickup_window(self) -> "DishBatchPublish":
+        if self.pickup_end_time <= self.pickup_start_time:
+            raise ValueError("Pickup end time must be after pickup start time")
+        if (
+            self.rule_discount_start_time is not None
+            and not self.pickup_start_time <= self.rule_discount_start_time <= self.pickup_end_time
+        ):
+            raise ValueError("Rule discount start time must be within the pickup window")
+        return self
+
+
 class DishUpdate(BaseModel):
     """Partial update payload for a dish listing."""
 
@@ -90,6 +154,8 @@ class DishResponse(DishBase):
     total_quantity: int
     remaining_quantity: int
     status: DishStatus
+    current_price: Decimal | None = None
+    is_rule_discount_active: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -5,6 +5,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.store import KycStatus, Store
 
@@ -99,6 +100,11 @@ async def update_kyc_status(
 
 async def list_approved_stores(db: AsyncSession) -> list[Store]:
     """Return all KYC-approved stores (with relationships loaded via selectin)."""
-    stmt = select(Store).where(Store.kyc_status == KycStatus.APPROVED)
+    stmt = (
+        select(Store)
+        .where(Store.kyc_status == KycStatus.APPROVED)
+        .options(selectinload(Store.dishes))
+        .execution_options(populate_existing=True)
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all())

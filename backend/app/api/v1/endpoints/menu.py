@@ -1,12 +1,12 @@
-"""Base Menu Catalog CRUD endpoints (/stores/{store_id}/menu-items and /menu-items/{item_id})."""
+"""Store-owned menu catalog endpoints."""
 
-from typing import Annotated, Any
-from uuid import UUID
+import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, status
 
-from app.api.deps import DBSession, require_roles
-from app.models.user import User, UserRole
+from app.api.deps import DBSession, StoreOwner
+from app.models.menu_item import MenuItem
+from app.schemas.menu_item import MenuItemBase, MenuItemResponse, MenuItemUpdate
 from app.services.menu_service import MenuService
 
 router = APIRouter()
@@ -14,70 +14,51 @@ router = APIRouter()
 
 @router.post(
     "/stores/{store_id}/menu-items",
+    response_model=MenuItemResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_menu_item(
-    store_id: UUID,
-    item_in: dict[str, Any],
+    store_id: uuid.UUID,
+    item_in: MenuItemBase,
     db: DBSession,
-    current_user: Annotated[
-        User,
-        Depends(require_roles(UserRole.STORE_PARTNER, UserRole.ADMIN)),
-    ],
-) -> dict[str, Any]:
-    """Thêm món vào danh mục gốc của cửa hàng (chỉ chủ quán hoặc Admin)."""
-    service = MenuService(db)
-    owner_check_id = None if current_user.role == UserRole.ADMIN else current_user.id
-    return await service.create_menu_item(
-        store_id=store_id,
-        item_data=item_in,
-        current_user_id=owner_check_id,
+    _: StoreOwner,
+) -> MenuItem:
+    """Add a canonical menu item to an approved store."""
+    return await MenuService(db).create_menu_item(
+        store_id, item_in.model_dump(exclude={"is_active"})
     )
 
 
 @router.get("/stores/{store_id}/menu-items")
 async def get_store_menu_items(
-    store_id: UUID,
+    store_id: uuid.UUID,
     db: DBSession,
-) -> dict[str, Any]:
-    """Lấy danh sách tất cả món trong thực đơn chuẩn của quán."""
-    service = MenuService(db)
-    return await service.get_store_menu_items(store_id)
+    _: StoreOwner,
+) -> dict[str, object]:
+    """List active canonical menu items belonging to the authenticated store."""
+    items = await MenuService(db).get_store_menu_items(store_id)
+    return {
+        "total": len(items),
+        "items": [MenuItemResponse.model_validate(item) for item in items],
+    }
 
 
-@router.put("/menu-items/{item_id}")
+@router.put("/menu-items/{item_id}", response_model=MenuItemResponse)
 async def update_menu_item(
-    item_id: UUID,
-    item_in: dict[str, Any],
+    item_id: uuid.UUID,
+    item_in: MenuItemUpdate,
     db: DBSession,
-    current_user: Annotated[
-        User,
-        Depends(require_roles(UserRole.STORE_PARTNER, UserRole.ADMIN)),
-    ],
-) -> dict[str, Any]:
-    """Cập nhật thông tin món ăn gốc."""
-    service = MenuService(db)
-    owner_check_id = None if current_user.role == UserRole.ADMIN else current_user.id
-    return await service.update_menu_item(
-        item_id=item_id,
-        update_data=item_in,
-        current_user_id=owner_check_id,
-    )
+    _: StoreOwner,
+) -> MenuItem:
+    """Update an owned menu item."""
+    return await MenuService(db).update_menu_item(item_id, item_in.model_dump(exclude_unset=True))
 
 
-@router.delete("/menu-items/{item_id}")
+@router.delete("/menu-items/{item_id}", response_model=MenuItemResponse)
 async def delete_menu_item(
-    item_id: UUID,
+    item_id: uuid.UUID,
     db: DBSession,
-    current_user: Annotated[
-        User,
-        Depends(require_roles(UserRole.STORE_PARTNER, UserRole.ADMIN)),
-    ],
-) -> dict[str, Any]:
-    """Ẩn/Xóa mềm món khỏi thực đơn."""
-    service = MenuService(db)
-    owner_check_id = None if current_user.role == UserRole.ADMIN else current_user.id
-    return await service.delete_menu_item(
-        item_id=item_id,
-        current_user_id=owner_check_id,
-    )
+    _: StoreOwner,
+) -> MenuItem:
+    """Soft-delete an owned menu item from the active catalog."""
+    return await MenuService(db).delete_menu_item(item_id)
