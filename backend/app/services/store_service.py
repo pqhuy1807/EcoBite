@@ -80,8 +80,7 @@ class StoreService:
             "name": store.name,
             "kyc_status": store.kyc_status.value,
             "message": (
-                "Hồ sơ đối tác đã gửi thành công và đang chờ "
-                "Quản trị viên duyệt chứng nhận ATVSTP."
+                "Hồ sơ đối tác đã gửi thành công và đang chờ Quản trị viên duyệt chứng nhận ATVSTP."
             ),
         }
 

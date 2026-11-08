@@ -29,6 +29,14 @@ from app.schemas.menu_item import (
     MenuItemResponse,
     MenuItemUpdate,
 )
+from app.schemas.nlp import (
+    AllergenRiskLevel,
+    DetectionSource,
+    EUAllergen,
+    NLPAllergenWarning,
+    QuickPostExtractionResponse,
+    SurplusDishItem,
+)
 from app.schemas.order import (
     OrderBase,
     OrderCreate,
@@ -44,6 +52,8 @@ from app.schemas.store import (
     StoreBase,
     StoreCreate,
     StoreKycReview,
+    StoreOnboardRequest,
+    StoreOnboardResponse,
     StoreResponse,
     StoreUpdate,
 )
@@ -69,6 +79,8 @@ __all__ = [
     "UserPreferenceUpdate",
     "StoreBase",
     "StoreCreate",
+    "StoreOnboardRequest",
+    "StoreOnboardResponse",
     "StoreUpdate",
     "StoreKycReview",
     "StoreResponse",
@@ -102,4 +114,10 @@ __all__ = [
     "ReviewResponse",
     "NotificationResponse",
     "NotificationUpdate",
+    "EUAllergen",
+    "DetectionSource",
+    "AllergenRiskLevel",
+    "NLPAllergenWarning",
+    "SurplusDishItem",
+    "QuickPostExtractionResponse",
 ]

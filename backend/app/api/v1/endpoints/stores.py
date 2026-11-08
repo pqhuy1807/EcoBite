@@ -3,70 +3,21 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import DBSession, require_roles
 from app.models.user import User, UserRole
+from app.schemas.store import StoreOnboardRequest
 from app.services.discovery import DiscoveryService
 from app.services.store_service import StoreService
-
-from sqlalchemy.orm import Session
-
-# Import schema bạn vừa tạo và các dependency của project
-from app.schemas.store import StoreOnboardRequest, StoreResponse
-# from app.api.dependencies import get_db, require_roles
-# from app.services import store_service
-
-router = APIRouter()
-
-@router.post("/onboard", response_model=StoreResponse, status_code=status.HTTP_201_CREATED)
-def onboard_store(
-    payload: StoreOnboardRequest,
-    # db: Session = Depends(get_db),
-    # current_user: dict = Depends(require_roles("STORE_PARTNER"))
-):
-    """
-    Tiếp nhận hồ sơ quán. Trạng thái khởi tạo mặc định là PENDING.
-    """
-    # Logic nối DB thực tế (bỏ comment khi code service):
-    # return store_service.create_onboard(db=db, user_id=current_user["id"], obj_in=payload)
-    
-    # Mock data để test Swagger/Postman trước:
-    import uuid
-    return {
-        "id": uuid.uuid4(),
-        "name": payload.name,
-        "kyc_status": "PENDING",
-        "message": "Hồ sơ đối tác đã gửi thành công và đang chờ Quản trị viên duyệt chứng nhận ATVSTP."
-    }
-
-@router.get("/{store_id}", response_model=StoreResponse)
-def get_store(
-    store_id: UUID,
-    # db: Session = Depends(get_db)
-):
-    """
-    Lấy chi tiết thông tin và trạng thái kiểm duyệt của cửa hàng.
-    """
-    # Logic nối DB thực tế:
-    # store = store_service.get(db=db, id=store_id)
-    # if not store:
-    #     raise HTTPException(status_code=404, detail="Store not found")
-    # return store
-    
-    # Mock data:
-    return {
-        "id": store_id,
-        "name": "Tiệm Bánh Mì & Cơm Trưa Sài Gòn",
-        "kyc_status": "PENDING"
-    }
 
 router = APIRouter()
 
 
 @router.post("/stores/onboard", status_code=status.HTTP_201_CREATED)
+@router.post("/onboard", status_code=status.HTTP_201_CREATED)
 async def onboard_store(
-    store_in: dict[str, Any],
+    store_in: StoreOnboardRequest | dict[str, Any],
     db: DBSession,
     current_user: Annotated[
         User,
@@ -74,8 +25,9 @@ async def onboard_store(
     ],
 ) -> dict[str, Any]:
     """Tiếp nhận đăng ký thông tin đối tác, tọa độ GPS và đường dẫn chứng nhận ATVSTP (KYC)."""
+    payload = store_in.model_dump() if hasattr(store_in, "model_dump") else store_in
     service = StoreService(db)
-    return await service.onboard_store(current_user.id, store_in)
+    return await service.onboard_store(current_user.id, payload)
 
 
 @router.get("/stores/nearby")
@@ -100,6 +52,7 @@ async def search_nearby_stores(
 
 
 @router.get("/stores/{store_id}")
+@router.get("/{store_id}")
 async def get_store_detail(
     store_id: UUID,
     db: DBSession,
