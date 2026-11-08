@@ -8,7 +8,8 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
-    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+    # Compatible across starlette versions (<0.38 lacks StarletteDeprecationWarning)
+    "ignore::DeprecationWarning:starlette",
 ]
 
 [tool.ruff]

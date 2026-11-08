@@ -50,7 +50,7 @@ async def login(
                 password = body.get("password")
         except Exception:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Invalid JSON payload",
             ) from None
     else:
@@ -62,7 +62,7 @@ async def login(
 
     if not email or not password:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Missing email or password",
         )
 

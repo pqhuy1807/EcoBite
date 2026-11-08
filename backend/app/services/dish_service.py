@@ -42,7 +42,7 @@ class DishService:
             override = Decimal(str(override_discounted_price))
             if override <= 0 or override > price:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
                         "Override price must be greater than zero and no higher than original price"
                     ),
@@ -88,7 +88,7 @@ class DishService:
         target_menu_id = menu_item_id or data.get("menu_item_id")
         if target_menu_id is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="menu_item_id is required",
             )
         resolved_menu_id = (
@@ -145,7 +145,7 @@ class DishService:
         store_id = menu_items[0].store_id
         if any(item.store_id != store_id for item in menu_items):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="All menu items in a batch must belong to the same store",
             )
         store = await self.db.get(Store, store_id)
@@ -188,7 +188,7 @@ class DishService:
     ) -> Dish:
         if pickup_end <= pickup_start:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Pickup end time must be after pickup start time",
             )
         original_price = Decimal(str(dish_data.get("original_price") or menu_item.original_price))
@@ -253,7 +253,7 @@ class DishService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dish not found")
         if quantity > dish.total_quantity:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Quantity cannot exceed the originally published amount",
             )
         new_status = DishStatus.SOLD_OUT if quantity == 0 else DishStatus.ACTIVE
