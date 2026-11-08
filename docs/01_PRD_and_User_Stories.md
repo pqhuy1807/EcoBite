@@ -1,209 +1,227 @@
-# EcoBite Platform - Product Requirement Document (PRD) & User Stories
+# 🌱 EcoBite Platform - Product Requirement Document (PRD) & User Stories
 
-**Dự án**: EcoBite - Nền tảng Cứu trợ Thực phẩm Dư thừa & Kết nối Xanh (Food Rescue Platform)
-**Tác giả**: Senior DevOps Engineer & Technical Project Manager
-**Phiên bản**: 2.1.0 (Bổ sung Nhóm Tính năng AI Riêng biệt & Hệ thống Gợi ý Món ăn Thông minh)
-**Trạng thái**: Approved for Implementation
+**Dự án**: EcoBite - Nền tảng Giải cứu Thực phẩm Thông minh & Kết nối Xanh (Food Rescue Platform)
+**Nhóm thực hiện**: Group 5 - Lớp Kỹ nghệ Phần mềm / Computer Science (HCMUS)
+- **Phùng Quốc Huy** (24127402 - pqhuy2425@clc.fitus.edu.vn) — *AI and Data Lead / Full-Stack Engineer*
+- **Đặng Trọng Phúc** (24127495 - dtphuc2418@clc.fitus.edu.vn) — *Backend Lead & AI Engineer / Full-Stack Engineer*
+- **Đàng Thế Tony** (24127561 - dttony2424@clc.fitus.edu.vn) — *QA/Tester Lead & Backend Engineer / Full-Stack Engineer*
+- **Võ Ngọc Thịnh** (24127246 - vnthinh2418@clc.fitus.edu.vn) — *Frontend Lead / Full-Stack Engineer*
 
----
-
-## 1. Tổng quan Dự án (Executive Summary)
-
-### 1.1. Bối cảnh & Vấn đề (Problem Statement)
-Hàng ngày, hàng ngàn nhà hàng, tiệm bánh, quán ăn, quán cafe và siêu thị buộc phải tiêu hủy một lượng lớn các món ăn ngon, sạch, đảm bảo vệ sinh an toàn thực phẩm chỉ vì không bán hết trong ca kinh doanh. Điều này gây ra:
-- **Tổn thất kinh tế**: Doanh nghiệp F&B mất doanh thu từ chi phí nguyên liệu và phí xử lý rác thải.
-- **Tác động môi trường**: Thực phẩm hữu cơ phân hủy tại bãi rác sinh ra khí mê-tan ($CH_4$) và khí nhà kính ($CO_2$), đẩy nhanh biến đổi khí hậu.
-- **Lãng phí xã hội**: Người tiêu dùng có thu nhập trung bình/thấp, sinh viên, nhân viên văn phòng gặp khó khăn trong việc tiếp cận các bữa ăn chất lượng với mức giá tiết kiệm.
-
-### 1.2. Giải pháp EcoBite (Solution)
-**EcoBite** là nền tảng O2O (Online-to-Offline) kết nối các cơ sở kinh doanh ăn uống với người tiêu dùng có nhu cầu mua **các món ăn dư thừa trong ngày (Surplus Food Dishes)** với mức giá giải cứu giảm sâu từ 40% - 70%.
-- **Minh bạch thực đơn**: Người dùng biết chính xác mình đang mua món gì (ví dụ: Cơm sườn nướng, Phở gà, Bánh croissant, Trà sữa trân châu...), có thành phần và cảnh báo dị ứng rõ ràng.
-- **Bộ đôi Trí tuệ Nhân tạo Đột phá (Google Gemini 2.5 Flash)**:
-  1. *Phía Quán*: Trợ lý AI Quick-Post bóc tách thực đơn và cảnh báo dị ứng tự động trong 1 giây.
-  2. *Phía Khách*: Động cơ Gợi ý Món ăn Thông minh Cá nhân hóa (Smart Recommendation Engine) phân tích ngữ cảnh, gu ẩm thực và sinh lý do đề xuất thuyết phục.
-- **Luật giảm giá theo khung giờ (Rule-based Time-based Discounting)**: Áp dụng cơ chế hạ giá tự động theo luật thời gian minh bạch (càng gần giờ đóng cửa, giá càng giảm sâu để xả hết thực phẩm).
-- **Lấy hàng bảo mật tại quán**: Khách hàng đặt mua và đến trực tiếp quán để lấy món thông qua **Mã QR động ký điện tử HMAC-SHA256**.
+**Phiên bản**: 2.2.0 (Đồng bộ chuẩn hóa 100% theo Báo cáo Đề xuất Dự án - Project Proposal)
+**Trạng thái**: Approved for Implementation (Sprints PA1 – PA5)
 
 ---
 
-## 2. Các Nhóm Người dùng (User Personas)
+## 1. Giới thiệu Tổng quan (Project Proposal & Introduction)
 
-1. **Người tiêu dùng (Consumer - End User)**:
-   - Giới trẻ, sinh viên, nhân viên văn phòng có thói quen ăn uống tiết kiệm và quan tâm đến lối sống không rác thải (Zero-waste).
-   - Nhu cầu: Nhận được gợi ý món ăn đúng gu và gần vị trí nhất, biết rõ thành phần món ăn, săn món giảm giá sâu vào khung giờ vàng, lấy hàng nhanh gọn.
-2. **Đối tác Cửa hàng (Store Partner / Merchant)**:
-   - Quán cơm, nhà hàng, tiệm bánh mì/bánh ngọt, quán cafe, chuỗi bán lẻ F&B.
-   - Nhu cầu: Đăng tải cực nhanh các phần thức ăn còn dư cuối ca làm việc mà không mất thời gian nhập liệu phức tạp, thu hồi vốn nguyên liệu, giảm lãng phí và xây dựng hình ảnh thương hiệu xanh.
-3. **Quản trị viên Hệ thống (System Admin / Operations)**:
-   - Đội ngũ vận hành EcoBite.
-   - Nhu cầu: Kiểm duyệt giấy phép kinh doanh và chứng nhận an toàn vệ sinh thực phẩm (ATVSTP), theo dõi giao dịch, xử lý khiếu nại và đo lường chỉ số giảm phát thải $CO_2$ toàn hệ thống.
+**EcoBite** là nền tảng giải cứu thực phẩm thông minh theo mô hình Online-to-Offline (O2O), được thiết kế nhằm kết nối các cơ sở kinh doanh thực phẩm thương mại (như nhà hàng, tiệm bánh, quán cà phê và siêu thị) với người tiêu dùng địa phương đang tìm kiếm các bữa ăn chất lượng cao với mức giá ưu đãi sâu (giảm từ 40% đến 70%).
 
----
+Mỗi ngày, các gian bếp thương mại tại khu vực đô thị phải bỏ đi một lượng lớn thức ăn tươi ngon, đảm bảo vệ sinh chỉ vì chúng chưa được bán hết trong ca làm việc. Sự kém hiệu quả có hệ thống này dẫn đến tổn thất tài chính trực tiếp cho các chủ cửa hàng và gây ra hậu quả nghiêm trọng về môi trường, do rác thải hữu cơ phân hủy tại các bãi chôn lấp tạo ra các loại khí nhà kính mạnh ($CH_4$ và $CO_2$).
 
-## 3. Đặc tả Danh mục Tính năng Hệ thống
+EcoBite giải quyết cuộc khủng hoảng này thông qua phương pháp minh bạch, thực tế và dựa trên công nghệ:
+- **Giải cứu minh bạch từng món ăn (Không sử dụng túi mù - No Mystery Bags)**: Khác với các nền tảng phương Tây (như Too Good To Go) sử dụng "túi mù" ngẫu nhiên vốn gặp khó khăn tại thị trường Việt Nam do thói quen ăn uống và độ nhạy cảm về chế độ ăn, EcoBite yêu cầu niêm phong và liệt kê minh bạch từng món ăn dư thừa cụ thể, kèm theo hình ảnh rõ ràng, bảng thành phần tiêu chuẩn và cảnh báo dị ứng được xác thực.
+- **Cơ chế giảm giá thời gian theo quy tắc tất định (Deterministic Rule-Based Time-Shift Discounting)**: Giá bán tuân theo các lịch trình quy tắc minh bạch (ví dụ: giảm 40%–50% trong khung giờ giải cứu tiêu chuẩn, tự động chuyển sang giảm 60%–70% trong 30–45 phút cuối trước khi đóng cửa), mang lại sự dự đoán trước cho cửa hàng và tối đa hóa tỷ lệ thanh lý hàng tồn.
+- **Bộ đôi trí tuệ nhân tạo AI (Được hỗ trợ bởi Google Gemini 2.5 Flash)**: Tận dụng khả năng hiểu âm thanh đa phương thức nguyên bản và Xử lý ngôn ngữ tự nhiên (NLP) giúp các chủ quán bận rộn đăng bán hàng loạt các món ăn dư cuối ca chỉ trong vòng chưa đầy 3 giây với bộ lọc dị ứng 2 tầng, kết hợp cùng hệ thống gợi ý ngữ cảnh thông minh mang lại các gợi ý giải cứu bữa ăn cá nhân hóa cho người tiêu dùng.
 
 ---
 
-### PHÂN HỆ I: NHÓM TÍNH NĂNG NỀN TẢNG & VẬN HÀNH O2O (CORE PLATFORM)
+## 2. Người dùng Mục tiêu & Môi trường Vận hành (Target Users and Environments)
 
-#### Tính năng 1: Xác thực & Quản trị Duyệt Quán (Auth & Partner KYC Onboarding)
-- **Đăng ký / Đăng nhập**: Hỗ trợ Email/Password và Google OAuth2 (Single Sign-On).
-- **Phân quyền người dùng (RBAC)**: `CONSUMER`, `STORE_PARTNER`, `ADMIN`.
-- **Quy trình Onboarding Đối tác**:
-  - Đối tác tạo hồ sơ: Tên cửa hàng, địa chỉ, định vị GPS, số điện thoại, ảnh cửa hàng, chứng nhận ATVSTP.
-  - Trạng thái hồ sơ: `PENDING_REVIEW` $\rightarrow$ `APPROVED` hoặc `REJECTED`.
-  - Admin duyệt hồ sơ thông qua Admin Portal, gửi email thông báo kết quả. Quán chỉ được đăng món sau khi được duyệt.
+### 2.1. Người dùng Mục tiêu (Target Users)
+1. **Consumers (Người tiêu dùng / Người giải cứu thực phẩm)**:
+   - Sinh viên đại học, nhân viên văn phòng và những cá nhân quan tâm đến chi phí, tìm kiếm các bữa ăn chất lượng, hợp vệ sinh với mức giá phải chăng, cũng như những công dân có ý thức sinh thái muốn tích cực giảm thiểu lãng phí thực phẩm đô thị.
+2. **Store Partners (Đối tác cửa hàng / Chủ kinh doanh)**:
+   - Tiệm bánh, quán cà phê, nhà hàng, quán ăn gia đình và siêu thị muốn kiếm tiền từ thực phẩm dư thừa cuối ca, thu hồi chi phí nguyên liệu, giảm thiểu phí xử lý rác thải và tiếp cận khách hàng địa phương mới.
+3. **System Administrators (Quản trị viên hệ thống)**:
+   - Đội ngũ vận hành nền tảng chịu trách nhiệm xác minh chứng nhận an toàn thực phẩm (ATVSTP) và thông tin xác thực kinh doanh của cửa hàng, kiểm duyệt danh sách thực phẩm, giám sát giao dịch, giảm thiểu tranh chấp và theo dõi các chỉ số môi trường tổng hợp.
 
-#### Tính năng 2: Quản lý Món ăn Cụ thể & Giảm giá Theo Khung giờ Rule-based (Dish Management & Rule-based Discounting)
-- **Thông tin món ăn cụ thể**: Tên món, danh mục (Cơm, Bún/Phở, Bánh mì, Đồ ngọt, Đồ uống...), mô tả, ảnh món ăn, số lượng suất còn lại.
-- **Khung giờ nhận món (Pickup Window)**: Ví dụ: Ca trưa từ `13:30 - 15:00`, ca tối từ `20:00 - 21:30`.
-- **Luật giảm giá theo khung giờ (Rule-based Time-based Discounting)**:
-  - *Giá giải cứu tiêu chuẩn (`rescue_price`)*: Áp dụng trong suốt khung giờ mở bán (giảm 40% - 50% so với giá gốc).
-  - *Giá giờ chót (`rule_discount_price`)*: Tự động kích hoạt khi bước vào 30-45 phút cuối trước giờ kết thúc (ví dụ từ 20:45 tự động giảm còn 70% giá gốc) theo luật xác định trước để thúc đẩy giải cứu toàn bộ lượng thức ăn còn lại.
-
-#### Tính năng 3: Tìm kiếm Không gian Địa lý (Geo-Spatial Search with PostGIS)
-- **Truy vấn PostGIS**: Sử dụng hàm `ST_DWithin` và GIST Spatial Index trên trường toạ độ `stores.location` để tìm các quán và món ăn đang giảm giá trong bán kính 1km, 3km, 5km, 10km.
-- **Bản đồ Leaflet tương tác**: Ghim các quán xung quanh, xem danh sách món ăn còn suất và giá ưu đãi ngay trên popup marker.
-
-#### Tính năng 4: Đặt hàng & Khóa Tồn kho Chống Bán Vượt (Order Placement & Atomic Inventory Lock)
-- Khách chọn từng món cụ thể, số lượng và phương thức thanh toán.
-- **Chống Over-selling**: Sử dụng Database Transaction với câu lệnh nguyên tử (`UPDATE dishes SET remaining_quantity = remaining_quantity - :qty WHERE remaining_quantity >= :qty`) hoặc Redis Distributed Lock. Nếu 2 khách cùng bấm mua 1 suất cuối cùng, chỉ 1 người thành công.
-
-#### Tính năng 5: Sinh Mã QR Bảo mật Động (Dynamic HMAC-SHA256 QR Token)
-- Khi đặt hàng thành công, hệ thống sinh mã QR trên app của khách.
-- Token được ký điện tử bằng thuật toán **HMAC-SHA256** chứa `order_id`, `consumer_id`, `pickup_deadline`, và chuỗi ngẫu nhiên `nonce`.
-- Mã QR chỉ có hiệu lực đúng trong khung giờ nhận hàng (`pickup_window`), ngăn chặn hoàn toàn việc chụp màn hình gửi bừa bãi.
-
-#### Tính năng 6: Quét Mã QR Xác nhận Giao Hàng tại Quán (Camera QR Scanner Verification)
-- Ứng dụng phía Store Partner tích hợp Camera Web Scanner (`html5-qrcode`).
-- Khi khách đến quán nhận món, chủ quán dùng camera quét mã QR của khách.
-- Hệ thống giải mã chữ ký, kiểm tra tính hợp lệ và đổi trạng thái đơn sang `COMPLETED`.
-- **Chống Replay Attack**: Mỗi mã QR chỉ quét được 1 lần duy nhất. Nếu quét lại lần 2, hệ thống từ chối và báo lỗi đỏ.
-
-#### Tính năng 7: Đánh giá Món ăn Thực tế (Verified Dish Reviews & Rating)
-- Chỉ người dùng đã nhận món thành công (`COMPLETED`) mới có quyền gửi đánh giá (Verified Purchase).
-- Đánh giá 1 - 5 sao kèm hình ảnh thực tế cho **từng món ăn cụ thể** và thái độ phục vụ của quán.
-- Điểm đánh giá trung bình tự động cập nhật vào trang cửa hàng và ảnh hưởng đến thứ tự ưu tiên hiển thị.
-
-#### Tính năng 8: Tích Điểm Xanh & Đo lường Giảm Phát thải CO2 (Green Points & CO2 Tracker)
-- **Công thức quy đổi**: Mỗi suất ăn được giải cứu thành công tương đương giảm phát thải $\approx 2.5\text{ kg } CO_2$ ra môi trường.
-- Người dùng nhận Điểm Xanh (`Green Points`) vào ví cá nhân sau mỗi đơn hàng hoàn tất.
-- **Đổi Voucher**: Dùng Điểm Xanh để đổi các mã giảm giá cho các đơn mua tiếp theo.
-- **Bảng vinh danh (Green Leaderboard)**: Tôn vinh các cá nhân và quán ăn cứu trợ nhiều thực phẩm nhất.
+### 2.2. Môi trường Mục tiêu (Target Environments)
+1. **Client Application (Ứng dụng khách)**:
+   - Ứng dụng Web Tiến bộ (PWA) đa nền tảng, phản hồi hoàn toàn (fully responsive) được xây dựng bằng **Next.js 14 (App Router)** và **Tailwind CSS**.
+   - Tối ưu hóa cho trình duyệt di động (Apple Safari trên iOS, Google Chrome trên Android) cũng như môi trường máy tính để bàn hiện đại (Windows, macOS, Linux).
+2. **Backend Infrastructure (Hạ tầng Backend)**:
+   - Các dịch vụ vi mô dạng container được cung cấp bởi **FastAPI (Python 3.11)** với I/O bất đồng bộ.
+   - **PostgreSQL 16 kết hợp PostGIS** để thực hiện các truy vấn không gian địa lý (geospatial).
+   - **Redis 7** phục vụ việc lưu trữ cache và khóa phân tán nguyên tử (atomic locking).
+   - **Google GenAI SDK** (`google-genai`) để gọi mô hình Gemini 2.5 Flash với Pydantic Structured Outputs.
+   - **Cổng thanh toán VNPay** với cơ chế bảo mật chữ ký HMAC-SHA512 và Webhook IPN idempotent.
 
 ---
 
-### PHÂN HỆ II: NHÓM TÍNH NĂNG TRÍ TUỆ NHÂN TẠO (AI INTELLIGENCE SUITE)
-> **Động cơ**: Google Gemini 2.5 Flash (Gói Free Tier qua Google AI Studio / Google AI Pro) + Google GenAI SDK (`google-genai`)
+## 3. Danh mục Tính năng Cốt lõi (Key Features)
 
-#### Tính năng AI 1: Trợ lý Bóc tách Món ăn & Cảnh báo An toàn Dị ứng Siêu tốc (Smart Menu Parser & Allergen Guard)
-> **Động cơ**: Google Gemini 2.5 Flash (Gói Free Tier qua Google AI Studio / Pro) + Google GenAI SDK (`google-genai`) với Native Audio Multimodal & Structured Outputs (Pydantic Schema).
+### Feature 1: Authentication & Merchant Onboarding (Xác thực & Đăng ký cửa hàng - KYC & Kiểm tra ATVSTP)
+- **Function**: Người dùng đăng nhập qua Email/Password hoặc Google OAuth2 với Phân quyền dựa trên vai trò (`CONSUMER`, `STORE_PARTNER`, `ADMIN`) sử dụng JWT dual-tokens (Access Token ngắn hạn và Refresh Token an toàn). Các cửa hàng phải nộp Giấy chứng nhận Vệ sinh An toàn Thực phẩm (ATVSTP) chính thức và thông tin xác thực kinh doanh để quản trị viên phê duyệt bắt buộc trước khi được cấp quyền đăng bán.
+- **Value**: Thiết lập niềm tin cộng đồng toàn diện, đảm bảo rằng tất cả thực phẩm dư thừa được giảm giá đều có nguồn gốc từ các cơ sở đạt chuẩn, vệ sinh và uy tín.
 
-Tính năng giải quyết triệt để 5 điểm nghẽn vận hành thực tế tại các quán ăn Việt Nam:
-1. **Menu-Catalog Grounding (Kế thừa Thực đơn gốc & Ảnh món ăn)**:
-   - Quán ăn đã có Thực đơn gốc (`menu_items`) gồm: Tên chuẩn, Ảnh đại diện món, Giá gốc và Thành phần chuẩn.
-   - Khi chủ quán đọc danh sách món dư, Gemini trích xuất tên món và thực hiện so khớp ngữ nghĩa (*Semantic/Fuzzy Matching*) với `menu_item_id` của quán để tự động kéo **Ảnh món ăn + Giá gốc** và kích hoạt Luật giảm giá theo thời gian.
-   - Nếu chủ quán đọc giá giảm cụ thể (*"xả nhanh 20k"*), hệ thống ghi nhận vào `override_discounted_price` để ghi đè lên quy tắc mặc định.
-2. **Suy luận Dị ứng 2 Tầng (2-Tier Allergen Guard) & Nhãn Khẩu vị Địa phương**:
-   - **Tầng 1 (EXPLICIT - Khai báo trực tiếp)**: Bắt các thành phần do chủ quán đọc ra (*"có đậu phộng rang"*, *"sốt bơ trứng"*).
-   - **Tầng 2 (INFERRED - Suy luận tri thức ẩm thực Việt)**: Dù chủ quán chỉ đọc *"Cơm sườn chả"*, AI kết hợp công thức ẩm thực để tự suy luận: Chả chưng có **Trứng (Eggs)**, Nước mắm có **Cá (Fish)**, Mỡ hành có **Đậu phộng (Peanuts)** theo chuẩn 14 chất dị ứng EU FIC.
-   - **Mở rộng nhãn khẩu vị (`dietary_notes`)**: Bổ sung các nhóm kiêng ăn phổ biến tại Việt Nam: Có Hành/Ngò (*Allium*), Đồ cay, Đồ chua, Ăn chay.
-3. **Trích xuất Hàng loạt (Batch Extraction Schema)**:
-   - Thiết kế Schema dạng danh sách `List[SurplusDishItem]`, cho phép chủ quán nói một mạch: *"Hôm nay dư 5 cơm sườn, 3 bún thịt nướng và 4 bánh flan, bán từ 2h đến 4h chiều nhé"*. Cả 3 món cùng được bóc tách và kế thừa khung giờ chung `14:00 - 16:00`.
-4. **Xử lý Thời gian Tương đối (Relative Time Ingestion)**:
-   - Backend truyền biến `current_server_time` (chuẩn ISO 8601, ví dụ: `2026-10-16T13:55:00+07:00`) vào System Prompt của Gemini 2.5 Flash. Khi chủ quán nói *"bán từ giờ đến 3h chiều"* hoặc *"xả trong 1 tiếng nữa"*, mô hình tự tính toán ra mốc thời gian tuyệt đối `pickup_start` và `pickup_end` chính xác 100%.
-5. **Xử lý Trực tiếp Luồng Âm thanh (Native Multimodal Audio Understanding)**:
-   - Thay vì dùng STT trung gian dễ nhận diện sai tên món và tiếng lóng (*"bốn lăm cành"*, *"bì chả"*), ứng dụng gửi file ghi âm ngắn trực tiếp sang Gemini 2.5 Flash kèm danh sách thực đơn trong Prompt để mô hình nghe và đối soát ngữ cảnh chuẩn xác.
+### Feature 2: Base Menu Catalog & Surplus Dish Management (Danh mục thực đơn cơ bản & Quản lý món dư)
+- **Function**: Cửa hàng duy trì Danh mục Thực đơn Cơ bản cố định (`menu_items`) chứa hình ảnh độ phân giải cao tiêu chuẩn, giá bán lẻ gốc và thông tin thành phần cơ bản. Vào cuối ca, cửa hàng khởi tạo các Món Dư hoạt động (`dishes`) chỉ định số lượng còn lại, khung giờ nhận hàng và tùy chọn giá thanh lý cố định (`override_discounted_price`).
+- **Value**: Loại bỏ gánh nặng phải tạo lại món ăn từ đầu, đảm bảo danh sách dư thừa luôn hiển thị hình ảnh chân thực, hấp dẫn và giá gốc chính xác.
 
-#### Tính năng AI 2: Hệ thống Gợi ý Món ăn Thông minh Cá nhân hóa (AI Smart Food Recommendation Engine)
-Động cơ gợi ý Hybrid kết hợp 3 lớp phân tích thông minh:
-1. **Lớp Ngữ cảnh Thời gian thực (Context-Aware Layer)**:
-   - Xác định toạ độ GPS của user: Ưu tiên quán trong bán kính đi bộ/xe máy gần nhất (1km - 3km).
-   - Xác định thời điểm trong ngày: Bữa trưa (11h - 13h30), Bữa xế (14h - 16h), Bữa tối (18h - 20h30).
-   - **Ưu tiên Deal Cứu trợ Khẩn cấp (Urgent Rescue Deals)**: Đẩy lên đầu danh sách các món ăn thuộc gu của user đang bước vào 30 phút cuối của luật giảm giá 70%.
-2. **Lớp Sở thích & Hồ sơ Cá nhân (User Profile & Taste Layer)**:
-   - Đọc lịch sử đặt món: Tần suất chọn món nước, món khô, đồ ngọt hay đồ ăn mặn.
-   - Tự động loại trừ các món có thành phần chứa chất dị ứng của người dùng (dựa trên bảng `user_preferences`).
-   - Khớp khung ngân sách quen thuộc của người dùng.
-3. **Lớp Sinh lý tưởng Gợi ý bằng GenAI (AI Justification Generator)**:
-   - **Gemini 2.5 Flash** nhận đầu vào gồm hồ sơ user và top 3 món ăn phù hợp nhất quanh khu vực, sinh ra câu văn giải thích tự nhiên, ngắn gọn và cực kỳ thuyết phục hiển thị trực tiếp trên thẻ món ăn (UI Card):
-     *Ví dụ: "💡 Gợi ý cho bạn: Bạn thường chọn bún/phở vào buổi trưa. Quán Phở Bắc cách bạn 400m đang có deal giảm 50% chỉ còn 25.000đ (còn 2 suất cuối đến 14h), rất hợp khẩu vị thanh đạm của bạn!"*
+### Feature 3: Rule-Based Time-Shift Discounting Engine (Công cụ giảm giá theo khung giờ dựa trên quy tắc)
+- **Function**: Thực thi các quy tắc định giá giảm dần theo thời gian một cách tất định mà không có sự suy đoán giá ngẫu nhiên từ AI hộp đen. Các món ăn tự động chuyển đổi qua các mức được định nghĩa trước: khung giờ giải cứu tiêu chuẩn (giảm 40%–50%) và giờ cao điểm thanh lý cuối (giảm tới 70% trong 30–45 phút cuối) đi kèm với đồng hồ đếm ngược trực tiếp.
+- **Value**: Mang lại sự minh bạch về giá rõ ràng cho người tiêu dùng và tạo động lực cấp bách để thanh lý 100% hàng tồn kho dễ hỏng trước khi nhà bếp đóng cửa.
+
+### Feature 4: Location-Based Search & PostGIS Radar Discovery (Tìm kiếm dựa trên vị trí & Khám phá Radar PostGIS)
+- **Function**: Tận dụng chỉ mục không gian PostgreSQL PostGIS (`ST_DWithin`, `ST_Distance`) để tính toán khoảng cách thời gian thực giữa người tiêu dùng và các cửa hàng lân cận trong bán kính 1–5 km (có thể mở rộng lên 10 km). Tích hợp bản đồ radar tương tác với các ghim bản đồ trực tiếp, bộ lọc ẩm thực (cơm, mì, bánh mì, chay), thanh trượt giá và chỉ báo mức độ gấp của thời gian nhận món.
+- **Value**: Giúp người tiêu dùng khám phá các bữa ăn dư thừa trong khoảng cách đi bộ chỉ trong vài giây, giảm thiểu thời gian di chuyển và đảm bảo món ăn còn nóng sốt.
+
+### Feature 5: Inventory Anti-Overselling Lock & Order Management (Khóa chống bán quá tồn kho & Quản lý đơn hàng)
+- **Function**: Quản lý thanh toán của người tiêu dùng với quyền kiểm soát đồng thời cấp cơ sở dữ liệu nghiêm ngặt. Sử dụng các câu lệnh cập nhật SQL nguyên tử (`UPDATE dishes SET remaining_quantity = remaining_quantity - :qty WHERE remaining_quantity >= :qty`) được hỗ trợ bởi cơ chế khóa phân tán Redis.
+- **Value**: Đảm bảo không xảy ra tình trạng bán vượt quá số lượng tồn kho (zero over-selling), loại bỏ các tình trạng tranh chấp dữ liệu (race conditions) khi nhiều người dùng cùng cố gắng mua suất ăn cuối cùng tại cùng một thời điểm.
+
+### Feature 6: Seamless Cashless Checkout (VNPay Payment Gateway) (Thanh toán không tiền mặt liền mạch - Cổng thanh toán VNPay)
+- **Function**: Tích hợp cổng thanh toán VNPay hỗ trợ quét VNPAY-QR động từ các ứng dụng ngân hàng di động, thẻ ATM nội địa và ví điện tử. Sử dụng các lệnh gọi lại Thông báo thanh toán tức thời (IPN) được mã hóa xác thực HMAC-SHA512 với quy trình xử lý webhook chống trùng lặp (idempotent).
+- **Value**: Tạo điều kiện thuận lợi cho các giao dịch không tiền mặt mượt mà, phù hợp với người dùng trẻ tuổi đồng thời bảo vệ người bán khỏi gian lận thanh toán.
+
+### Feature 7: Dynamic HMAC-SHA256 Single-Use QR Token & In-Store Web Scanner (Mã QR một lần mã hóa động HMAC-SHA256 & Trình quét web tại cửa hàng)
+- **Function**: Tạo mã QR được ký mã hóa động chứa mã thông báo HMAC-SHA256 được dẫn xuất từ mã định danh đơn hàng, danh tính người dùng, mã ngẫu nhiên (`nonce`) và thời gian hết hạn (`pickup_deadline`). Chủ cửa hàng quét mã QR của khách hàng thông qua máy quét camera web tích hợp sẵn (`html5-qrcode`).
+- **Value**: Xác thực chữ ký trong thời gian thực, đánh dấu mã thông báo đã được sử dụng ngay lập tức và loại bỏ việc chia sẻ ảnh chụp màn hình hoặc các cuộc tấn công phát lại (gian lận nhận trùng lặp).
+
+### Feature 8: Verified Reviews, Green Points & Environmental Impact Tracker (Đánh giá xác thực, Điểm Xanh & Trình theo dõi tác động môi trường)
+- **Function**: Chỉ những người dùng có giao dịch nhận hàng qua quét QR trực tiếp tại cửa hàng đã được xác minh mới có thể gửi đánh giá và xếp hạng từ 1 đến 5 sao. Đồng thời, nền tảng quy đổi các bữa ăn được giải cứu thành các chỉ số sinh thái được xác thực (khoảng 2.5 kg $CO_2e$ được tiết kiệm cho mỗi 1 kg thực phẩm được giải cứu) và cộng Điểm Xanh (Green Points) vào tài khoản người dùng để đổi voucher trên Bảng xếp hạng Xanh công khai.
+- **Value**: Gam hóa hành vi tiêu dùng bền vững và cung cấp báo cáo môi trường rõ ràng cho các cửa hàng tham gia.
 
 ---
 
-## 4. User Stories & Acceptance Criteria
+## 4. Danh mục Tính năng Trí Tuệ Nhân Tạo (AI Features - Powered by Google Gemini 2.5 Flash)
 
-### US-01: Đăng ký & Xét duyệt Cửa hàng (Partner Onboarding)
-**As a** Chủ quán cơm trưa văn phòng,
-**I want** đăng ký tài khoản đối tác và nộp giấy phép ATVSTP,
-**So that** tôi có thể mở bán các suất cơm trưa còn dư sau khi được Admin phê duyệt.
+### AI Feature 1: Batch Quick-Post Multimodal Assistant & 2-Tier Allergen Guard (Trợ lý đa phương thức đăng nhanh hàng loạt & Bộ bảo vệ dị ứng 2 tầng)
+- **Function**: Giải quyết điểm nghẽn vận hành quan trọng khi nhân viên bếp bận rộn không có thời gian gõ biểu mẫu thủ công vào cuối ca. Người bán chỉ cần ghi âm một đoạn clip giọng nói trò chuyện ngắn (ví dụ: *"Còn 5 cơm sườn chả, 3 bún thịt nướng xả từ giờ đến 3h chiều nhé"*):
+  1. **Native Multimodal Audio Ingestion (Nhập âm thanh đa phương thức nguyên bản)**: Gửi trực tiếp tệp âm thanh thô tới Gemini 2.5 Flash mà không qua phần mềm chuyển đổi giọng nói thành văn bản (STT) trung gian, diễn giải chính xác các phương ngữ vùng miền Việt Nam, từ lóng (*"bốn lăm cành"*, *"bì chả"*) và các sắc thái ẩm thực.
+  2. **Menu-Catalog Grounding (Neo ngữ cảnh theo danh mục thực đơn)**: Gemini so sánh tên món ăn được trích xuất với Danh mục Thực đơn Cơ bản của cửa hàng trong ngữ cảnh câu lệnh để gán `matched_menu_id`, tự động kế thừa hình ảnh món ăn đã xác thực, giá bán lẻ tiêu chuẩn và kích hoạt các mức giảm giá theo quy tắc.
+  3. **Two-Tier Allergen Guard (14 EU FIC Standards) (Bộ lọc dị ứng 2 tầng theo chuẩn 14 chất gây dị ứng của EU)**:
+     - **Explicit Detection (Phát hiện rõ ràng)**: Nắm bắt các chất gây dị ứng được người bán nêu trực tiếp bằng giọng nói (ví dụ: *"chứa đậu phộng nghiền"*).
+     - **Inferred Culinary Knowledge (Kiến thức ẩm thực suy luận)**: Tự động suy luận các chất gây dị ứng ẩn dựa trên công thức truyền thống Việt Nam: ví dụ, Cơm sườn chả chứa Trứng (trong chả trứng hấp) và Cá (trong nước mắm); Bún thịt nướng chứa Đậu phộng và Nước mắm; Bánh mì chứa Gluten.
+     - **Local Dietary Notes (Ghi chú chế độ ăn uống địa phương)**: Gắn cờ các sở thích mang tính văn hóa quan trọng (`dietary_notes`): Sự hiện diện của hành lá/hành tỏi (Có mỡ hành), mức độ cay, dưa chua và trạng thái món chay.
+  4. **Batch Extraction & Server-Time Grounding (Trích xuất hàng loạt & Neo thời gian máy chủ)**: Trích xuất đồng thời nhiều món ăn dư thừa (`List[SurplusDishItem]`) và chuyển đổi các biểu thức thời gian tương đối (*"từ giờ đến 3 giờ chiều"*) thành dấu thời gian chuẩn ISO 8601 tuyệt đối bằng cách sử dụng `current_server_time` được cung cấp.
+- **Value**: Giảm thời gian đăng từ 3 phút cho mỗi món xuống dưới 3 giây cho toàn bộ lô thực đơn, đồng thời ngăn ngừa các phản ứng dị ứng nguy hiểm đến tính mạng thông qua các cảnh báo y tế chuẩn hóa.
 
+### AI Feature 2: Smart Food Recommendation & Natural Language Semantic Search (Gợi ý món ăn thông minh & Tìm kiếm ngữ nghĩa bằng ngôn ngữ tự nhiên)
+- **Function**: Cung cấp khả năng khám phá bữa ăn dư thừa được cá nhân hóa, nhận biết ngữ cảnh thông qua kiến trúc kết hợp 3 lớp mạnh mẽ:
+  1. **Layer 1 - Hard Safety Invariant (SQL & PostGIS) (Lớp 1 - Bất biến an toàn cứng)**: Lọc các món ăn có sẵn trong bán kính 1–3 km và loại trừ nghiêm ngặt 100% các món ăn khớp với hồ sơ dị ứng y tế của người tiêu dùng (`excluded_allergens` trong `user_preferences`). Tính an toàn y tế được đảm bảo nghiêm ngặt ngay tại cấp độ truy vấn cơ sở dữ liệu và không bao giờ ủy quyền cho việc sinh văn bản AI xác suất.
+  2. **Layer 2 - Multi-Factor Heuristic Scoring (Lớp 2 - Chấm điểm heuristic đa yếu tố)**: Xếp hạng các món ăn ứng viên bằng cách sử dụng công thức tổng hợp trọng số khách quan:
+     $$\text{Score} = (0.40 \times \text{Proximity}) + (0.30 \times \text{Discount Depth \& Time Urgency}) + (0.30 \times \text{Taste Profile Match})$$
+     Ưu tiên các Giao dịch Giải cứu Cấp bách bước vào 30 phút cuối của đợt xả hàng giảm giá 70% để ngăn chặn thực phẩm hết hạn.
+  3. **Layer 3 - Generative AI Personalization (Lớp 3 - Cá nhân hóa bằng AI tạo sinh)**: 3 món ăn ứng viên được xếp hạng hàng đầu và hồ sơ khẩu vị của người dùng được gửi tới Gemini 2.5 Flash để tổng hợp một lời giải thích ngắn gọn, mang tính thuyết phục cảm xúc (20–30 từ) hiển thị trên thẻ giao diện người dùng (ví dụ: *"Gợi ý cho bạn: Bạn thường xuyên thích các món súp mì nóng vào buổi trưa. Quán Phở Bắc cách 350m đang cung cấp ưu đãi thanh lý 67% chỉ với 18.000 VND, còn 2 phần đến 13:30 — cam kết hoàn toàn không chứa đậu phộng theo sở thích của bạn!"*).
+  4. **Conversational Semantic Search (Tìm kiếm ngữ nghĩa hội thoại)**: Cho phép người tiêu dùng truy vấn bằng ngôn ngữ tự nhiên (ví dụ: *"Tìm cho tôi một món súp ấm áp dễ chịu dưới 30k ở gần đây"*), trong đó Gemini trích xuất ý định, ngân sách và các ràng buộc chế độ ăn uống để lọc cơ sở dữ liệu PostGIS.
+- **Value**: Tối đa hóa tỷ lệ chuyển đổi, loại bỏ sự mệt mỏi khi lướt tìm kiếm cho những người dùng đang đói, đồng thời nhanh chóng giải phóng hàng hóa dễ hỏng trước khi nhà bếp đóng cửa mà không làm ảnh hưởng đến sức khỏe người tiêu dùng.
+
+---
+
+## 5. Khảo sát Ứng dụng Hiện tại & Cơ hội Phát triển (Existing App Survey)
+
+### 5.1. Khảo sát Yindii (Đông Nam Á)
+- **Mô hình Yindii**:
+  - Người dùng lựa chọn giữa 2 phương thức: Mua hàng khô (`Dry goods`) hoặc Mua suất ăn dư (`Surplus meals`).
+  - Hỗ trợ cả 2 hình thức: Tự đến lấy (`Yindii Pickup`) hoặc Giao hàng tận nơi (`Yindii Drop`).
+  - Động cơ gợi ý món: Gợi ý các món ăn ngẫu nhiên cho từng bữa (`Recommend random foods for each meal`).
+- **Sự khác biệt của EcoBite**:
+  - **Tập trung 100% vào Pickup Surplus Meals**: Chỉ phục vụ hình thức đến nhận trực tiếp tại quán đối với món ăn dư thừa trong ngày (không làm hàng khô, không giao hàng đường dài để đảm bảo thực phẩm nóng hổi và không phát sinh rác thải bao bì vận chuyển).
+  - **Cá nhân hóa bằng AI**: Gợi ý món ăn thông minh theo khẩu vị cá nhân, vị trí GPS và lịch sử đơn hàng bằng Gemini 2.5 Flash, loại trừ hoàn toàn yếu tố gợi ý ngẫu nhiên thiếu ngữ cảnh.
+
+### 5.2. Khảo sát Too Good To Go (Âu Mỹ)
+- **Ưu điểm**:
+  - Quy trình từ tìm kiếm đến nhận thực phẩm rõ ràng, tập trung vào thực phẩm dư thừa và giá ưu đãi sâu.
+  - Có tìm kiếm theo khu vực, bộ lọc và thông tin khung giờ nhận món rõ ràng; khơi gợi ý thức bảo vệ môi trường.
+- **Nhược điểm lớn khi áp dụng tại Việt Nam**:
+  - Mô hình "Túi mù" (Surplus Mystery Bag / Surprise Bag) ngẫu nhiên không phù hợp với văn hóa ẩm thực Việt Nam (người dùng kén chọn món ăn, nhiều thói quen kiêng kỵ như không ăn hành mỡ, ăn chay vào ngày rằm, dị ứng hải sản/đậu phộng).
+- **Cơ hội Đột phá của EcoBite**:
+  - **Minh bạch 100% (No Mystery Bags)**: Bán từng món ăn cụ thể, niêm phong rõ ràng, có hình ảnh chất lượng cao kế thừa từ thực đơn gốc.
+  - **Cảnh báo Dị ứng 2 Tầng**: Rà soát dị ứng và ghi chú khẩu vị văn hóa Việt Nam (hành, tỏi, cay, chua).
+  - **Bản địa hóa thanh toán**: Tích hợp VNPay (quét VNPAY-QR qua app ngân hàng) và tiền tệ Việt Nam Đồng (VNĐ).
+  - **Luật giảm giá giờ chót minh bạch**: Người dùng chủ động canh khung giờ giảm 70% để tiết kiệm tối đa.
+
+---
+
+## 6. User Stories & Acceptance Criteria
+
+### US-01: Authentication & Merchant KYC Onboarding
+**As a** Chủ cơ sở kinh doanh F&B,
+**I want** Đăng ký tài khoản đối tác và nộp giấy phép ATVSTP cùng thông tin kinh doanh,
+**So that** Quản trị viên duyệt hồ sơ và cấp quyền cho tôi đăng bán thực phẩm dư thừa trên nền tảng.
 - **Acceptance Criteria**:
-  - *Given*: Chủ quán cung cấp đầy đủ thông tin (Tên quán, Địa chỉ, Tọa độ GPS, Ảnh chứng nhận ATVSTP).
+  - *Given*: Chủ quán cung cấp đầy đủ: Tên quán, địa chỉ, toạ độ GPS, SĐT và ảnh Giấy chứng nhận ATVSTP.
   - *When*: Bấm nút "Gửi hồ sơ kiểm duyệt".
-  - *Then*: Trạng thái cửa hàng chuyển sang `PENDING_REVIEW`, Admin nhận thông báo có quán mới. Quán chỉ có thể đăng món khi trạng thái chuyển sang `APPROVED`.
+  - *Then*: Trạng thái cửa hàng chuyển sang `PENDING`. Tài khoản bị chặn quyền tạo món cho đến khi Admin chuyển trạng thái sang `APPROVED`.
 
-### US-02: Đăng Món ăn Cụ thể với Luật Giảm giá theo Khung giờ
-**As a** Đối tác tiệm bánh mì,
-**I want** đăng bán 10 ổ bánh mì kẹp thịt xá xíu giá gốc 35k, giá giải cứu 18k từ 19:30 - 21:00 và tự động giảm tiếp còn 10k trong 30 phút cuối,
-**So that** tôi có thể thu hồi vốn và bán hết sạch bánh mì trong ngày.
-
+### US-02: Base Menu Catalog & Surplus Dish Management
+**As a** Đối tác cửa hàng đã được duyệt KYC,
+**I want** Duy trì danh mục thực đơn chuẩn (`menu_items`) và tạo món dư (`dishes`) cuối ca từ danh mục này,
+**So that** Món ăn dư thừa tự động kế thừa ảnh đại diện chất lượng cao và giá gốc chuẩn mà không phải nhập lại từ đầu.
 - **Acceptance Criteria**:
-  - *Given*: Cửa hàng ở trạng thái `APPROVED`.
-  - *When*: Cửa hàng nhập thông tin món cụ thể, số lượng 10, chọn khung giờ nhận 19:30 - 21:00, và tick chọn "Kích hoạt luật giảm giá giờ chót 10.000đ sau 20:30".
-  - *Then*: Hệ thống lưu món vào CSDL; từ 19:30 khách thấy giá 18k, từ đúng 20:30 giá tự động hiển thị 10k kèm đồng hồ đếm ngược.
+  - *Given*: Quán đã khởi tạo món "Bánh Croissant Bơ Pháp" (giá gốc 40.000đ, ảnh chuẩn) trong `menu_items`.
+  - *When*: Cuối ca, chủ quán chọn món này để tạo món dư, nhập số lượng 8 và khung giờ nhận 20:00 - 21:30.
+  - *Then*: Món ăn mới xuất hiện trong bảng `dishes` với đầy đủ ảnh chuẩn, giá gốc 40.000đ và giá giải cứu 20.000đ.
 
-### US-03: Trợ lý AI Bóc tách Hàng loạt Món ăn & Khớp Thực đơn Gốc (Batch Quick-Post & Menu Grounding)
-**As a** Chủ quán ăn đang bận rộn dọn dẹp cuối ca,
-**I want** thu âm một câu nói ngắn liệt kê nhiều món ăn dư thừa cùng lúc (*"Còn 5 cơm sườn, 3 bún chả và 4 chè đậu xả từ giờ đến 3h chiều"*),
-**So that** Trợ lý AI tự động khớp thực đơn gốc để lấy ảnh và giá, rà soát dị ứng 2 tầng (Explicit + Inferred) và tạo danh sách thẻ món ăn để tôi đăng bài trong 1 chạm.
-
+### US-03: Rule-Based Time-Shift Discounting Engine
+**As a** Đối tác tiệm bánh,
+**I want** Món ăn tự động áp dụng giá giải cứu 50% trong ca và tự động hạ sâu 70% trong 30 phút cuối trước khi đóng cửa,
+**So that** Kích thích khách mua nhanh và thanh lý sạch 100% hàng tồn kho dễ hỏng.
 - **Acceptance Criteria**:
-  - *Given*: Quán đã có Thực đơn gốc (`menu_items`) và micro ghi âm hoạt động.
-  - *When*: Chủ quán gửi file ghi âm ngắn kèm `current_server_time = 13:55:00`.
-  - *Then*: API gọi Gemini 2.5 Flash (Native Audio) trả về cấu trúc `QuickPostExtractionResponse`:
-    - Khung giờ nhận: `13:55:00` - `15:00:00`.
-    - Trích xuất đủ 3 món: Tự động gắn `matched_menu_id` để lấy ảnh và giá gốc từ thực đơn.
-    - Cảnh báo dị ứng 2 tầng: Cơm sườn chả có nhãn `INFERRED` cảnh báo Trứng (trong chả) và Cá (trong nước mắm).
-    - Màn hình hiển thị danh sách 3 thẻ món ăn kèm nút gạt xác nhận dị ứng; chủ quán bấm **"Đăng tất cả" trong 3 giây**.
+  - *Given*: Món bánh mì có giá gốc 30.000đ, mở bán từ 19:30 - 21:00.
+  - *When*: Thời gian thực của hệ thống bước qua mốc 20:30 (30 phút cuối).
+  - *Then*: Giá hiển thị tự động chuyển từ 15.000đ (giảm 50%) sang 9.000đ (giảm 70%) kèm đồng hồ đếm ngược trực tiếp trên UI.
 
-### US-04: Hệ thống Gợi ý Món ăn Thông minh Cá nhân hóa (AI Smart Recommendation)
+### US-04: Location-Based Search & PostGIS Radar Discovery
+**As a** Người tiêu dùng,
+**I want** Mở bản đồ radar định vị GPS để xem các món ăn dư thừa đang giảm giá quanh tôi trong bán kính 1–5 km,
+**So that** Tôi chọn được món ăn nóng hổi trong khoảng cách đi bộ ngắn nhất.
+- **Acceptance Criteria**:
+  - *Given*: Người dùng bật định vị GPS trên trình duyệt di động.
+  - *When*: Người dùng mở tab Bản đồ Radar trên app EcoBite.
+  - *Then*: Bản đồ Leaflet tải danh sách các quán trong bán kính 3km thông qua PostGIS `ST_DWithin`, hiển thị ghim màu và popup thông tin món cùng mức giảm giá.
+
+### US-05: Inventory Anti-Overselling Lock & Order Placement
+**As a** Người tiêu dùng đang săn suất ăn cuối cùng,
+**I want** Đặt hàng với cơ chế khóa tồn kho nguyên tử cấp cơ sở dữ liệu,
+**So that** Đơn hàng của tôi không bị tranh chấp hoặc rơi vào tình trạng bán vượt quá số lượng tồn (zero over-selling).
+- **Acceptance Criteria**:
+  - *Given*: Món ăn chỉ còn đúng 1 suất (`remaining_quantity = 1`) và có 2 người cùng bấm mua đồng thời.
+  - *When*: Câu lệnh `UPDATE dishes SET remaining_quantity = remaining_quantity - 1 WHERE remaining_quantity >= 1` được thực thi.
+  - *Then*: Chỉ đúng 1 người nhận được mã đơn hàng `CONFIRMED`, người thứ hai nhận phản hồi `409 Conflict` báo hết hàng.
+
+### US-06: Seamless Cashless Checkout (VNPay Payment Gateway)
+**As a** Người tiêu dùng,
+**I want** Thanh toán không tiền mặt bằng cách quét mã VNPAY-QR từ ứng dụng ngân hàng di động,
+**So that** Giao dịch được xử lý liền mạch, an toàn và tức thì.
+- **Acceptance Criteria**:
+  - *Given*: Người dùng chọn phương thức thanh toán VNPay tại màn hình Checkout.
+  - *When*: Bấm "Thanh toán", hệ thống chuyển hướng đến cổng VNPay và người dùng quét QR hoàn tất chuyển khoản.
+  - *Then*: VNPay gửi webhook IPN có chữ ký HMAC-SHA512 về server; hệ thống xử lý idempotent, đổi trạng thái đơn sang `PAID` và hiển thị mã nhận món.
+
+### US-07: Dynamic HMAC-SHA256 Single-Use QR Token & In-Store Web Scanner
+**As a** Nhân viên cửa hàng,
+**I want** Dùng camera trình duyệt quét mã QR động của khách khi khách đến lấy món,
+**So that** Xác thực chữ ký điện tử hợp lệ, hoàn tất đơn hàng và chống gian lận quét lại (Replay Attack).
+- **Acceptance Criteria**:
+  - *Given*: Khách hàng xuất trình mã QR động chứa chữ ký HMAC-SHA256 trong khung giờ nhận món.
+  - *When*: Nhân viên quét mã bằng máy quét camera web (`html5-qrcode`).
+  - *Then*: Hệ thống xác thực chữ ký thành công, đánh dấu `is_used = true`, đổi trạng thái đơn sang `COMPLETED`. Nếu khách quét lại lần 2, hệ thống từ chối ngay lập tức.
+
+### US-08: Verified Reviews, Green Points & Environmental Impact Tracker
+**As a** Người tiêu dùng đã hoàn tất đơn hàng,
+**I want** Nhận Điểm Xanh (tương ứng với lượng $CO_2$ giảm phát thải) và viết đánh giá cho món ăn,
+**So that** Tích luỹ điểm đổi voucher và chia sẻ đánh giá thực tế cho cộng đồng.
+- **Acceptance Criteria**:
+  - *Given*: Đơn hàng chuyển sang trạng thái `COMPLETED` sau khi quét QR.
+  - *When*: Hệ thống hoàn tất giao dịch.
+  - *Then*: Tài khoản khách được cộng Điểm Xanh (quy đổi 2.5 kg $CO_2e$ cho mỗi suất ăn) và form đánh giá 1–5 sao kèm ảnh chụp được mở ra.
+
+### US-09: Batch Quick-Post Multimodal Assistant & 2-Tier Allergen Guard (AI Feature 1)
+**As a** Chủ quán bận rộn cuối ca,
+**I want** Gửi 1 đoạn ghi âm giọng nói ngắn liệt kê nhiều món ăn dư thừa (*"Còn 5 cơm sườn chả, 3 bún thịt nướng xả từ giờ đến 3h chiều"*),
+**So that** Gemini 2.5 Flash bóc tách hàng loạt, khớp thực đơn gốc để lấy ảnh và giá, tự động gắn cảnh báo dị ứng 2 tầng (Explicit + Inferred) để tôi đăng bài chỉ trong 3 giây.
+- **Acceptance Criteria**:
+  - *Given*: File ghi âm giọng nói và `current_server_time = 13:55:00`.
+  - *When*: Gửi tới `POST /api/v1/ml/parse-dish-nlp`.
+  - *Then*: Trả về `QuickPostExtractionResponse` gồm danh sách món đã khớp `matched_menu_id`, cảnh báo dị ứng Trứng/Cá/Đậu phộng và thời gian tuyệt đối `13:55:00 - 15:00:00`. Chủ quán bấm 1 nút đăng toàn bộ lên CSDL.
+
+### US-10: Smart Food Recommendation & Conversational Semantic Search (AI Feature 2)
 **As a** Người tiêu dùng chuẩn bị ăn trưa,
-**I want** mở app và thấy ngay danh sách "Món Ngon Gợi Ý Cho Bạn" kèm lý do AI giải thích,
-**So that** tôi chọn được món ngon hợp khẩu vị gần nhất mà không mất thời gian tìm kiếm.
-
+**I want** Nhận gợi ý món ăn thông minh theo ngữ cảnh (gần vị trí, loại trừ dị ứng của tôi) kèm lý do giải thích tự nhiên, hoặc gõ câu tự nhiên để tìm kiếm,
+**So that** Tôi chọn được món ăn phù hợp nhất mà không tốn công tìm kiếm.
 - **Acceptance Criteria**:
-  - *Given*: Người dùng đã đăng nhập và bật GPS.
-  - *When*: Người dùng mở Trang chủ ứng dụng.
-  - *Then*: Hệ thống chạy thuật toán Recommendation lọc các món trong bán kính 2km, loại trừ món chứa dị ứng trong hồ sơ của user, hiển thị Top 3 món kèm lời giải thích tự nhiên từ Gemini 2.5 Flash (*"Gợi ý vì bạn thích món nước vào buổi trưa và quán cách bạn 300m đang giảm 50%"*).
-
-### US-05: Đặt hàng & Nhận Mã QR Đơn hàng
-**As a** Người tiêu dùng,
-**I want** đặt mua 2 suất cơm sườn nướng và nhận mã QR có chữ ký bảo mật,
-**So that** tôi mang mã này tới quán để nhận đúng món ăn đã đặt.
-
-- **Acceptance Criteria**:
-  - *Given*: Món ăn còn số lượng tồn kho $\ge 2$.
-  - *When*: Người dùng bấm "Xác nhận đặt hàng".
-  - *Then*: Số lượng món giảm 2 ngay lập tức trong một transaction nguyên tử, mã QR chứa token HMAC-SHA256 được tạo và hiển thị trong mục "Đơn hàng của tôi".
-
-### US-06: Quán Quét Mã QR Xác nhận Đơn
-**As a** Nhân viên quán ăn,
-**I want** dùng camera trên điện thoại quét mã QR của khách khi khách đến lấy món,
-**So that** xác thực đơn hàng hợp lệ và giao món.
-
-- **Acceptance Criteria**:
-  - *Given*: Khách hàng đưa mã QR hợp lệ trong khung giờ nhận món.
-  - *When*: Nhân viên quét mã bằng camera web app.
-  - *Then*: Hệ thống kiểm tra chữ ký HMAC thành công, cập nhật đơn hàng thành `COMPLETED`, phát âm thanh báo thành công và cộng điểm xanh cho người dùng.
-  - *Given (Trường hợp lỗi)*: Khách đưa mã QR đã quét rồi hoặc đã hết hạn, hệ thống hiển thị cảnh báo đỏ từ chối giao dịch.
-
-### US-07: Đánh giá Món ăn Sau Khi Thưởng thức
-**As a** Người tiêu dùng,
-**I want** chấm 5 sao và đánh giá món cơm gà xối mỡ sau khi ăn xong,
-**So that** cộng đồng có thêm review thực tế và quán ăn được nâng cao uy tín.
-
-- **Acceptance Criteria**:
-  - *Given*: Đơn hàng có trạng thái `COMPLETED`.
-  - *When*: Người dùng gửi form đánh giá (chọn số sao + viết nhận xét + tải ảnh món ăn thực tế).
-  - *Then*: Đánh giá xuất hiện công khai trên trang chi tiết món ăn và trang cửa hàng, điểm đánh giá trung bình của quán được tự động cập nhật.
+  - *Given*: Người dùng có hồ sơ dị ứng Đậu phộng trong `user_preferences`.
+  - *When*: Gọi `GET /api/v1/recommendations/personalized?lat=10.77&lng=106.70`.
+  - *Then*: Hệ thống SQL lọc cứng loại bỏ toàn bộ món có đậu phộng, chọn Top 3 món có điểm cao nhất theo công thức Heuristic, và Gemini sinh lý do ngắn gọn (20–30 từ) hiển thị trên giao diện.

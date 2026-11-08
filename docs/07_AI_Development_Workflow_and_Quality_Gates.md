@@ -1,7 +1,13 @@
 # EcoBite Platform - AI Development Workflow & Quality Gates
 
-**Dự án**: EcoBite - Nền tảng Cứu trợ Thực phẩm Dư thừa & Kết nối Xanh  
-**Tác giả**: Senior DevOps Engineer & Technical Project Manager  
+**Dự án**: EcoBite - Nền tảng Giải cứu Thực phẩm Thông minh & Kết nối Xanh (Food Rescue Platform)
+**Nhóm thực hiện**: Group 5 - Lớp Kỹ nghệ Phần mềm / Computer Science (HCMUS)
+- **Phùng Quốc Huy** (24127402) — *AI and Data Lead / Full-Stack Engineer*
+- **Đặng Trọng Phúc** (24127495) — *Backend Lead & AI Engineer / Full-Stack Engineer*
+- **Đàng Thế Tony** (24127561) — *QA/Tester Lead & Backend Engineer / Full-Stack Engineer*
+- **Võ Ngọc Thịnh** (24127246) — *Frontend Lead / Full-Stack Engineer*
+
+**Phiên bản**: 2.2.0 (Chuẩn hoá Quy trình TDD & Quality Gates)
 **Mục tiêu**: Hướng dẫn quy trình phát triển tính năng chuẩn Big Tech khi kết hợp cùng AI Coding Assistants (Antigravity, Cursor, Copilot).
 
 ---
@@ -43,18 +49,28 @@ Trong dự án EcoBite, chúng ta không tin tưởng code một cách mù quán
 
 ---
 
-## 2. Chuẩn bị Thư mục Tests cho Dự án
+## 2. Cấu trúc Phân tầng Backend & Thư mục Kiểm thử (3-Tier + TDD)
 
-Để sẵn sàng cho quy trình TDD, dự án sử dụng cấu trúc thư mục kiểm thử tiêu chuẩn sau:
+Để đảm bảo tính nhất quán giữa các thành viên và AI Coding Agents, dự án áp dụng kiến trúc 3 tầng (`Router ➔ Service ➔ Repository`) cùng cấu trúc thư mục kiểm thử tiêu chuẩn:
 
 ```text
 backend/
+├── app/
+│   ├── api/v1/endpoints/             # Layer 1: HTTP Routers & RBAC Guards (auth, users, stores, menu, dishes)
+│   ├── services/                     # Layer 2: Domain Business Logic (store_service, menu_service, dish_service, discovery)
+│   ├── repositories/                 # Layer 3: AsyncSession Data Access (user_repo, store_repo, menu_repo, dish_repo)
+│   ├── models/                       # SQLAlchemy 2.0 Mapped[T] ORM Entities
+│   └── schemas/                      # Pydantic v2 Request/Response Schemas
 └── tests/
     ├── conftest.py                   # Setup database test, Redis mock & JWT test fixtures
-    ├── unit/                         # Unit tests logic độc lập (tính giá, ký QR, điểm xanh)
-    │   └── .gitkeep
-    └── integration/                  # Integration tests gọi API và kết nối CSDL PostGIS thật
-        └── .gitkeep
+    ├── unit/                         # Unit tests logic độc lập & repository atomic queries
+    │   └── test_dish_service.py
+    └── integration/                  # Integration tests gọi API xuyên suốt Router -> Service -> Repo -> DB
+        ├── test_api_auth.py
+        ├── test_api_users.py
+        ├── test_api_stores.py
+        ├── test_api_discovery.py
+        └── test_api_menu_dishes.py
 
 frontend/
 └── __tests__/
@@ -110,5 +126,5 @@ pre-commit run --all-files
 
 Khi bạn bắt đầu Sprint 1 và muốn AI code một tính năng mới, hãy sử dụng mẫu prompt sau để AI tự động kích hoạt toàn bộ quy trình chuyên nghiệp:
 
-> **Mẫu Prompt Khuyến nghị:**  
+> **Mẫu Prompt Khuyến nghị:**
 > *"Hãy đọc file `AGENTS.md` và triển khai tính năng [TÊN_TÍNH_NĂNG]. Hãy viết test case trước trong `backend/tests/`, sau đó viết code nghiệp vụ, tự chạy kiểm thử bằng Terminal và chỉ thông báo hoàn thành khi toàn bộ test đã Pass."*

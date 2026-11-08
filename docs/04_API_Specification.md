@@ -1,14 +1,20 @@
-# EcoBite Platform - RESTful API Specification (v1)
+# 🔌 EcoBite Platform - RESTful API Specification (v1)
 
-**Dự án**: EcoBite - Nền tảng Cứu trợ Thực phẩm Dư thừa & Kết nối Xanh
+**Dự án**: EcoBite - Nền tảng Giải cứu Thực phẩm Thông minh & Kết nối Xanh (Food Rescue Platform)
+**Nhóm thực hiện**: Group 5 - Lớp Kỹ nghệ Phần mềm / Computer Science (HCMUS)
+- **Phùng Quốc Huy** (24127402) — *AI and Data Lead / Full-Stack Engineer*
+- **Đặng Trọng Phúc** (24127495) — *Backend Lead & AI Engineer / Full-Stack Engineer*
+- **Đàng Thế Tony** (24127561) — *QA/Tester Lead & Backend Engineer / Full-Stack Engineer*
+- **Võ Ngọc Thịnh** (24127246) — *Frontend Lead / Full-Stack Engineer*
+
 **Base URL**: `http://localhost:8000/api/v1`
 **Authentication**: Bearer Token (`Authorization: Bearer <jwt_access_token>`)
-**Format**: `application/json`
-**Phiên bản**: 2.1.0 (Bổ sung Phân hệ AI Suite & Gợi ý Món ăn Thông minh Cá nhân hóa)
+**Format**: `application/json` (Hỗ trợ `multipart/form-data` cho Native Audio và ảnh)
+**Phiên bản**: 2.2.0 (Chuẩn hóa 8 Tính năng Cốt lõi, Cổng VNPay IPN HMAC-SHA512 & 2 Tính năng AI Gemini 2.5 Flash)
 
 ---
 
-## 1. Xác thực & Quản lý Tài khoản (Authentication & Identity)
+## 1. Feature 1: Authentication & Merchant Onboarding (Xác thực & KYC Quán)
 
 ### 1.1. Đăng ký Tài khoản
 - **Method & Path**: `POST /auth/register`
@@ -26,7 +32,7 @@
 - **Response (201 Created)**:
   ```json
   {
-    "id": "a5e8c1b2-...",
+    "id": "a5e8c1b2-9d3e-4b2a-8c1f-2e3d4c5b6a7b",
     "email": "user@example.com",
     "full_name": "Nguyễn Văn A",
     "role": "CONSUMER",
@@ -35,7 +41,7 @@
   }
   ```
 
-### 1.2. Đăng nhập Lấy JWT Token
+### 1.2. Đăng nhập Lấy JWT Dual-Tokens
 - **Method & Path**: `POST /auth/login`
 - **Quyền hạn**: Public
 - **Request Body**:
@@ -49,6 +55,7 @@
   ```json
   {
     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "def50200a7b4...",
     "token_type": "bearer",
     "expires_in": 86400,
     "user": {
@@ -60,11 +67,7 @@
   }
   ```
 
----
-
-## 2. Quản lý Đối tác & Admin Kiểm duyệt (Store KYC & Admin Review)
-
-### 2.1. Đăng ký Thông tin Cửa hàng (Partner Onboarding)
+### 1.3. Đăng ký Cửa hàng & Nộp Chứng nhận ATVSTP (Store KYC Onboarding)
 - **Method & Path**: `POST /stores/onboard`
 - **Quyền hạn**: `STORE_PARTNER`
 - **Request Body**:
@@ -76,27 +79,26 @@
     "latitude": 10.776889,
     "longitude": 106.700806,
     "phone": "02838123456",
-    "avatar_url": "https://cdn.ecobite.vn/stores/avatar1.jpg",
-    "kyc_license_url": "https://cdn.ecobite.vn/kyc/license1.pdf"
+    "kyc_license_url": "https://cdn.ecobite.vn/kyc/atvstp_license1.pdf"
   }
   ```
 - **Response (201 Created)**:
   ```json
   {
-    "id": "e4f8d2a1-...",
+    "id": "e4f8d2a1-3c4b-5a6d-7e8f-9a0b1c2d3e4f",
     "name": "Tiệm Bánh Mì & Cơm Trưa Sài Gòn",
     "kyc_status": "PENDING",
-    "message": "Hồ sơ đối tác đã được gửi và đang chờ Admin kiểm duyệt."
+    "message": "Hồ sơ đối tác đã gửi thành công và đang chờ Quản trị viên duyệt chứng nhận ATVSTP."
   }
   ```
 
-### 2.2. Admin Phê duyệt / Từ chối Cửa hàng
+### 1.4. Admin Duyệt Hồ sơ Đối tác (Admin KYC Verification)
 - **Method & Path**: `PATCH /admin/stores/{store_id}/review`
 - **Quyền hạn**: `ADMIN`
 - **Request Body**:
   ```json
   {
-    "decision": "APPROVED",
+    "decision": "APPROVED",  // "APPROVED" | "REJECTED"
     "reject_reason": null
   }
   ```
@@ -111,42 +113,50 @@
 
 ---
 
-## 3. Quản lý Món ăn Dư thừa (Dish Management)
+## 2. Feature 2 & 3: Base Menu Catalog, Surplus Dishes & Rule-Based Discounting
 
-### 3.1. Tạo Món ăn Dư thừa Mới (Dish Creation)
-- **Method & Path**: `POST /dishes`
-- **Quyền hạn**: `STORE_PARTNER` (Đã được duyệt KYC)
+### 2.1. Thêm Món vào Thực đơn Chuẩn của Quán (Menu Catalog)
+- **Method & Path**: `POST /stores/{store_id}/menu-items`
+- **Quyền hạn**: `STORE_PARTNER` (Cửa hàng đã được duyệt KYC)
 - **Request Body**:
   ```json
   {
-    "name": "Cơm gà xối mỡ sốt cay",
-    "description": "Đùi gà chiên xối mỡ giòn rụm, kèm dưa leo và canh súp trong ngày",
+    "name": "Cơm sườn bì chả",
+    "description": "Cơm tấm truyền thống sườn nướng mật ong, bì thơm và chả trứng",
+    "category": "RICE",
+    "original_price": 45000.0,
+    "image_url": "https://cdn.ecobite.vn/menu/com_suon_bi_cha.jpg",
+    "standard_ingredients": ["gạo tấm", "sườn heo", "bì", "chả trứng", "mỡ hành", "dưa chua", "nước mắm"],
+    "base_allergens": ["Eggs (Trứng)", "Fish (Cá/Nước mắm)"],
+    "dietary_type": "NON_VEGAN"
+  }
+  ```
+
+### 2.2. Đăng Bán Món Dư Cuối Ca Thủ Công (Create Surplus Dish)
+- **Method & Path**: `POST /dishes`
+- **Quyền hạn**: `STORE_PARTNER`
+- **Request Body**:
+  ```json
+  {
+    "menu_item_id": "m1a2b3c4-...",
+    "name": "Cơm sườn bì chả",
     "category": "RICE",
     "original_price": 45000.0,
     "rescue_price": 22000.0,
-    "rule_discount_price": 15000.0,
+    "rule_discount_price": 13500.0,
     "pickup_start_time": "14:00:00",
     "pickup_end_time": "15:00:00",
     "rule_discount_start_time": "14:30:00",
     "total_quantity": 5,
-    "image_url": "https://cdn.ecobite.vn/dishes/com_ga.jpg",
-    "ingredients": ["cơm", "gà", "dưa leo", "sốt cay", "đậu phộng"],
-    "allergens": ["Đậu phộng"],
-    "dietary_type": "NON_VEGAN"
-  }
-  ```
-- **Response (201 Created)**:
-  ```json
-  {
-    "id": "d7a1b3c9-...",
-    "name": "Cơm gà xối mỡ sốt cay",
-    "remaining_quantity": 5,
-    "status": "ACTIVE"
+    "allergens": [
+      {"allergen": "Eggs (Trứng)", "risk_level": "HIGH", "source": "INFERRED", "reason": "Chả có trứng"},
+      {"allergen": "Fish (Cá)", "risk_level": "HIGH", "source": "INFERRED", "reason": "Nước mắm làm từ cá"}
+    ],
+    "dietary_notes": ["Có mỡ hành (Allium)", "Có dưa chua"]
   }
   ```
 
-### 3.2. Đăng Hàng loạt Món ăn Dư thừa (Batch Dish Publishing - 1-Tap Post)
-Sau khi AI bóc tách danh sách món, chủ quán duyệt các Draft Cards và bấm "Đăng tất cả".
+### 2.3. Đăng Hàng Loạt Món Dư sau khi Duyệt Draft Cards (1-Tap Batch Post)
 - **Method & Path**: `POST /dishes/batch`
 - **Quyền hạn**: `STORE_PARTNER`
 - **Request Body**:
@@ -172,7 +182,7 @@ Sau khi AI bóc tách danh sách món, chủ quán duyệt các Draft Cards và 
         "quantity": 3,
         "override_discounted_price": 20000.0,
         "allergens": [
-          {"allergen": "Peanuts (Đậu phộng)", "risk_level": "HIGH", "source": "INFERRED", "reason": "Rắc đậu phộng rang"}
+          {"allergen": "Peanuts (Đậu phộng)", "risk_level": "HIGH", "source": "INFERRED", "reason": "Đậu phộng rang"}
         ],
         "dietary_notes": ["Có hành phi", "Có đậu phộng"]
       }
@@ -190,233 +200,18 @@ Sau khi AI bóc tách danh sách món, chủ quán duyệt các Draft Cards và 
   }
   ```
 
-### 3.3. Quản lý Thực đơn Gốc của Quán (Base Menu Catalog)
-- **Method & Path**: `GET /stores/{store_id}/menu-items` (Lấy danh mục món chuẩn) & `POST /stores/{store_id}/menu-items` (Thêm món vào menu gốc)
-- **Quyền hạn**: `STORE_PARTNER`
-- **Request Body (POST)**:
-  ```json
-  {
-    "name": "Cơm sườn bì chả",
-    "description": "Cơm tấm truyền thống sườn nướng mật ong, bì thơm và chả trứng",
-    "category": "RICE",
-    "original_price": 45000.0,
-    "image_url": "https://cdn.ecobite.vn/menu/com_suon_bi_cha.jpg",
-    "standard_ingredients": ["gạo tấm", "sườn heo", "bì", "chả trứng", "mỡ hành", "dưa chua", "nước mắm"],
-    "base_allergens": ["Eggs (Trứng)", "Fish (Cá/Nước mắm)"],
-    "dietary_type": "NON_VEGAN"
-  }
-  ```
-
-### 3.4. Lấy Chi tiết Món ăn Dư thừa
-- **Method & Path**: `GET /dishes/{dish_id}`
-- **Quyền hạn**: Public
-- **Response (200 OK)**:
-  ```json
-  {
-    "id": "d7a1b3c9-...",
-    "name": "Cơm gà xối mỡ sốt cay",
-    "store_id": "e4f8d2a1-...",
-    "store_name": "Tiệm Bánh Mì & Cơm Trưa Sài Gòn",
-    "current_price": 22000.0,
-    "original_price": 45000.0,
-    "pickup_window": "14:00 - 15:00",
-    "remaining_quantity": 5,
-    "allergens": ["Đậu phộng"],
-    "dietary_type": "NON_VEGAN"
-  }
-  ```
-
 ---
 
-## 4. Phân hệ Trí tuệ Nhân tạo & Gợi ý Thông minh (AI Intelligence Suite)
+## 3. Feature 4: Location-Based Search & PostGIS Radar Discovery
 
-### 4.1. Trợ lý AI Bóc tách Hàng loạt Món ăn & Cảnh báo Dị ứng 2 Tầng (Batch Quick-Post NLP)
-Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, AI sử dụng `gemini-2.5-flash` đối soát với Thực đơn gốc (`menu_items`) và thời gian thực của server để trả về danh sách các món ăn kèm cảnh báo an toàn thực phẩm.
-
-- **Method & Path**: `POST /ml/parse-dish-nlp`
-- **Quyền hạn**: `STORE_PARTNER`
-- **Content-Type**: `multipart/form-data` HOẶC `application/json`
-- **Request Parameters / Body**:
-  - `audio_file`: *(Tùy chọn)* File ghi âm giọng nói định dạng `.m4a`, `.mp3`, `.wav`.
-  - `raw_text`: *(Tùy chọn)* Văn bản tiếng Việt tự do (Ví dụ: *"Còn 5 cơm sườn bì chả, 3 bún thịt nướng xả từ giờ đến 3h chiều"*).
-  - `current_server_time`: *(Tùy chọn, mặc định server tự lấy thời gian hiện tại)*: ISO 8601 (Ví dụ: `2026-10-16T13:55:00+07:00`).
-
-- **Response (200 OK - Pydantic `QuickPostExtractionResponse`)**:
-  ```json
-  {
-    "pickup_start": "13:55:00",
-    "pickup_end": "15:00:00",
-    "items": [
-      {
-        "matched_menu_id": "m1a2b3c4-...",
-        "dish_name": "Cơm sườn bì chả",
-        "quantity": 5,
-        "original_price": 45000.0,
-        "override_discounted_price": null,
-        "side_components": ["mỡ hành", "dưa chua", "nước mắm"],
-        "allergens": [
-          {
-            "allergen": "Eggs (Trứng)",
-            "risk_level": "HIGH",
-            "source": "INFERRED",
-            "reason": "Chả chưng theo công thức truyền thống chứa trứng gà/vịt"
-          },
-          {
-            "allergen": "Fish (Cá/Nước mắm)",
-            "risk_level": "HIGH",
-            "source": "INFERRED",
-            "reason": "Nước mắm ăn kèm có nguồn gốc từ cá"
-          },
-          {
-            "allergen": "Peanuts (Đậu phộng)",
-            "risk_level": "HIGH",
-            "source": "INFERRED",
-            "reason": "Mỡ hành ăn kèm cơm tấm Sài Gòn thường có đậu phộng rang"
-          }
-        ],
-        "dietary_notes": ["Có mỡ hành (Allium)", "Có dưa chua", "Không cay"],
-        "missing_fields_warning": []
-      },
-      {
-        "matched_menu_id": "b5c6d7e8-...",
-        "dish_name": "Bún thịt nướng",
-        "quantity": 3,
-        "original_price": 40000.0,
-        "override_discounted_price": 20000.0,
-        "side_components": ["rau sống", "đậu phộng", "nước mắm chua ngọt"],
-        "allergens": [
-          {
-            "allergen": "Peanuts (Đậu phộng)",
-            "risk_level": "HIGH",
-            "source": "INFERRED",
-            "reason": "Bún thịt nướng rắc đậu phộng rang giã nhuyễn"
-          },
-          {
-            "allergen": "Fish (Cá/Nước mắm)",
-            "risk_level": "HIGH",
-            "source": "INFERRED",
-            "reason": "Nước mắm chua ngọt làm từ cá"
-          }
-        ],
-        "dietary_notes": ["Có hành phi", "Có đậu phộng", "Có ớt"],
-        "missing_fields_warning": []
-      }
-    ]
-  }
-  ```
-
-### 4.2. Gợi ý Món ăn Thông minh Cá nhân hóa (AI Smart Personalized Recommendations)
-Động cơ gợi ý Hybrid phân tích vị trí thực tế, thời điểm ăn uống, gu ẩm thực và gọi Gemini 2.5 Flash sinh lý do đề xuất.
-- **Method & Path**: `GET /recommendations/personalized`
-- **Quyền hạn**: `CONSUMER` (hoặc Public nếu chưa đăng nhập)
-- **Query Parameters**:
-  - `lat`: Tọa độ vĩ độ người dùng (Ví dụ: `10.7769`)
-  - `lng`: Tọa độ kinh độ người dùng (Ví dụ: `106.7009`)
-  - `limit`: Số lượng món gợi ý (Mặc định: `5`)
-- **Response (200 OK)**:
-  ```json
-  {
-    "total_recommendations": 3,
-    "recommendations": [
-      {
-        "dish_id": "d7a1b3c9-...",
-        "dish_name": "Cơm gà xối mỡ sốt cay",
-        "store_name": "Tiệm Bánh Mì & Cơm Trưa Sài Gòn",
-        "distance_meters": 320.0,
-        "current_price": 22000.0,
-        "original_price": 45000.0,
-        "pickup_window": "14:00 - 15:00",
-        "remaining": 4,
-        "ai_match_score": 0.94,
-        "is_urgent_deal": false,
-        "ai_justification": "Món này rất hợp với bạn vì bạn thường thích ăn cơm vào bữa trưa, quán chỉ cách bạn 320m và có deal giảm 51% an toàn không chứa chất dị ứng của bạn."
-      },
-      {
-        "dish_id": "c1a9e3d8-...",
-        "dish_name": "Phở gà ta đùi xé",
-        "store_name": "Quán Phở Bắc 1985",
-        "distance_meters": 450.0,
-        "current_price": 18000.0,
-        "original_price": 55000.0,
-        "pickup_window": "13:30 - 14:30",
-        "remaining": 2,
-        "ai_match_score": 0.91,
-        "is_urgent_deal": true,
-        "ai_justification": "🔥 Cứu trợ khẩn cấp: Quán đang áp dụng luật giảm 67% trong 25 phút cuối, còn đúng 2 tô nước nóng sốt gần bạn!"
-      }
-    ]
-  }
-  ```
-
-### 4.3. Quản lý Hồ sơ Khẩu vị & Dị ứng Người dùng (User Preferences)
-- **Method & Path**: `GET /users/preferences` & `PUT /users/preferences`
-- **Quyền hạn**: `CONSUMER`
-- **Request Body (PUT)**:
-  ```json
-  {
-    "preferred_categories": ["RICE", "NOODLES"],
-    "dietary_preference": "NONE",  // "NONE" | "VEGAN" | "VEGETARIAN"
-    "excluded_allergens": ["Đậu phộng", "Hải sản"],
-    "max_budget": 40000.0
-  }
-  ```
-- **Response (200 OK)**:
-  ```json
-  {
-    "success": true,
-    "updated_at": "2026-10-16T14:30:00Z",
-    "message": "Đã cập nhật hồ sơ khẩu vị thành công. Các gợi ý AI sẽ tự động điều chỉnh theo tiêu chí này."
-  }
-  ```
-
-### 4.4. Tìm kiếm Ngữ nghĩa Món ăn bằng Câu nói Tự nhiên (Semantic Food Search)
-- **Method & Path**: `POST /dishes/search-semantic`
-- **Quyền hạn**: Public
-- **Request Body**:
-  ```json
-  {
-    "query": "tìm món nước thanh đạm dưới 35k gần đây",
-    "latitude": 10.7769,
-    "longitude": 106.7009,
-    "radius_km": 3.0
-  }
-  ```
-- **Response (200 OK)**:
-  ```json
-  {
-    "parsed_intent": {
-      "category": "NOODLES",
-      "dietary": "VEGETARIAN",
-      "max_price": 35000.0
-    },
-    "total_found": 1,
-    "dishes": [
-      {
-        "id": "c1a9e3d8-...",
-        "name": "Hủ tiếu chay rau củ nấm",
-        "store_name": "Quán Chay An Lạc",
-        "distance_meters": 450.0,
-        "current_price": 25000.0,
-        "original_price": 50000.0,
-        "pickup_time": "19:30 - 21:00",
-        "remaining": 4
-      }
-    ]
-  }
-  ```
-
----
-
-## 5. Tìm kiếm Theo Vị trí Không gian (Geo-Spatial Search)
-
-### 5.1. Lấy Danh sách Quán & Món ăn Gần Đây
+### 3.1. Tìm kiếm Radar Quán & Món ăn Xung quanh theo Tọa độ GPS
 - **Method & Path**: `GET /stores/nearby`
 - **Quyền hạn**: Public
 - **Query Parameters**:
   - `lat`: Tọa độ vĩ độ người dùng (Ví dụ: `10.7769`)
   - `lng`: Tọa độ kinh độ người dùng (Ví dụ: `106.7009`)
-  - `radius_km`: Bán kính tìm kiếm (Mặc định: `3.0`)
-  - `category`: Lọc danh mục món (Tùy chọn: `RICE`, `NOODLES`, `BAKERY`...)
+  - `radius_km`: Bán kính tìm kiếm (Mặc định: `3.0`, hỗ trợ 1.0 đến 10.0)
+  - `category`: Lọc danh mục (`RICE`, `NOODLES`, `BAKERY`, `VEGETARIAN`...)
 - **Response (200 OK)**:
   ```json
   {
@@ -429,17 +224,16 @@ Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, 
         "distance_meters": 320.5,
         "rating_avg": 4.9,
         "total_co2_saved_kg": 145.2,
-        "available_dishes_count": 2,
         "dishes": [
           {
             "id": "d7a1b3c9-...",
-            "name": "Cơm gà xối mỡ sốt cay",
+            "name": "Cơm sườn bì chả",
             "current_price": 22000.0,
             "original_price": 45000.0,
-            "pickup_time": "14:00 - 15:00",
-            "rule_discount_active": false,
-            "remaining": 5,
-            "allergens": ["Đậu phộng"]
+            "pickup_window": "13:55 - 15:00",
+            "is_rule_discount_active": false,
+            "remaining_quantity": 5,
+            "allergens": ["Eggs (Trứng)", "Fish (Cá/Nước mắm)"]
           }
         ]
       }
@@ -449,9 +243,107 @@ Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, 
 
 ---
 
-## 6. Đơn hàng & Xác thực Mã QR (Orders & QR Verification)
+## 4. AI Features: AI Intelligence Suite (Powered by Google Gemini 2.5 Flash)
 
-### 6.1. Đặt Mua Món ăn Cụ thể (Place Order)
+### 4.1. AI Feature 1: Trợ lý Bóc tách Đa phương thức & Rà soát Dị ứng 2 Tầng (Batch Quick-Post NLP)
+- **Method & Path**: `POST /ml/parse-dish-nlp`
+- **Quyền hạn**: `STORE_PARTNER`
+- **Content-Type**: `multipart/form-data` hoặc `application/json`
+- **Request Parameters / Body**:
+  - `audio_file`: *(Tùy chọn)* File ghi âm giọng nói định dạng `.m4a`, `.mp3`, `.wav`.
+  - `raw_text`: *(Tùy chọn)* Đoạn hội thoại tự do: *"Còn 5 cơm sườn chả, 3 bún thịt nướng xả từ giờ đến 3h chiều nhé"*.
+  - `current_server_time`: ISO 8601 server timestamp (VD: `2026-10-16T13:55:00+07:00`).
+- **Response (200 OK - Pydantic `QuickPostExtractionResponse`)**:
+  ```json
+  {
+    "pickup_start": "13:55:00",
+    "pickup_end": "15:00:00",
+    "items": [
+      {
+        "matched_menu_id": "m1a2b3c4-...",
+        "dish_name": "Cơm sườn bì chả",
+        "quantity": 5,
+        "original_price": 45000.0,
+        "override_discounted_price": null,
+        "allergens": [
+          {
+            "allergen": "Eggs (Trứng)",
+            "risk_level": "HIGH",
+            "source": "INFERRED",
+            "reason": "Chả chưng có chứa trứng theo công thức truyền thống Việt"
+          },
+          {
+            "allergen": "Fish (Cá/Nước mắm)",
+            "risk_level": "HIGH",
+            "source": "INFERRED",
+            "reason": "Nước mắm ăn kèm có nguồn gốc từ cá"
+          }
+        ],
+        "dietary_notes": ["Có mỡ hành (Allium)", "Có dưa chua"]
+      },
+      {
+        "matched_menu_id": "b5c6d7e8-...",
+        "dish_name": "Bún thịt nướng",
+        "quantity": 3,
+        "original_price": 40000.0,
+        "override_discounted_price": 20000.0,
+        "allergens": [
+          {
+            "allergen": "Peanuts (Đậu phộng)",
+            "risk_level": "HIGH",
+            "source": "INFERRED",
+            "reason": "Bún thịt nướng rắc đậu phộng rang"
+          }
+        ],
+        "dietary_notes": ["Có hành phi", "Có đậu phộng"]
+      }
+    ]
+  }
+  ```
+
+### 4.2. AI Feature 2: Gợi ý Món ăn Thông minh Cá nhân hóa (Smart Food Recommendation)
+- **Method & Path**: `GET /recommendations/personalized`
+- **Quyền hạn**: `CONSUMER`
+- **Query Parameters**: `lat`, `lng`, `limit` (mặc định: `3`)
+- **Thuật toán**: SQL PostGIS Hard Filter loại trừ 100% dị ứng của người dùng $\rightarrow$ Multi-Factor Heuristic Scoring:
+  $$\text{Score} = (0.40 \times \text{Proximity}) + (0.30 \times \text{Discount Depth \& Time Urgency}) + (0.30 \times \text{Taste Profile Match})$$
+  $\rightarrow$ Gemini 2.5 Flash sinh lý do thuyết phục ngắn gọn (20–30 từ).
+- **Response (200 OK)**:
+  ```json
+  {
+    "recommendations": [
+      {
+        "dish_id": "d7a1b3c9-...",
+        "dish_name": "Phở gà ta đùi xé",
+        "store_name": "Quán Phở Bắc 1985",
+        "distance_meters": 350.0,
+        "current_price": 18000.0,
+        "original_price": 55000.0,
+        "discount_percent": 67,
+        "is_urgent_deal": true,
+        "ai_justification": "Gợi ý cho bạn: Bạn thường xuyên thích các món súp mì nóng vào buổi trưa. Quán Phở Bắc cách 350m đang cung cấp ưu đãi thanh lý 67% chỉ với 18.000 VND, còn 2 phần đến 13:30 — cam kết hoàn toàn không chứa đậu phộng theo sở thích của bạn!"
+      }
+    ]
+  }
+  ```
+
+### 4.3. Tìm kiếm Ngữ nghĩa Hội thoại (Conversational Semantic Search)
+- **Method & Path**: `POST /dishes/search-semantic`
+- **Quyền hạn**: Public
+- **Request Body**:
+  ```json
+  {
+    "query": "Tìm cho tôi một món súp ấm áp dễ chịu dưới 30k ở gần đây",
+    "latitude": 10.7769,
+    "longitude": 106.7009
+  }
+  ```
+
+---
+
+## 5. Feature 5: Inventory Anti-Overselling Lock & Order Management
+
+### 5.1. Đặt Mua Món Dư Thừa với Khóa Tồn Kho Nguyên Tử (Place Order)
 - **Method & Path**: `POST /orders`
 - **Quyền hạn**: `CONSUMER`
 - **Request Body**:
@@ -459,8 +351,7 @@ Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, 
   {
     "dish_id": "d7a1b3c9-...",
     "quantity": 1,
-    "payment_method": "COD",
-    "voucher_code": null
+    "payment_method": "VNPAY"  // "VNPAY" | "COD"
   }
   ```
 - **Response (201 Created)**:
@@ -468,34 +359,75 @@ Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, 
   {
     "order_id": "8b7e2c14-...",
     "order_code": "EB-20261016-9981",
-    "dish_name": "Cơm gà xối mỡ sốt cay",
     "total_amount": 22000.0,
     "status": "CONFIRMED",
+    "payment_status": "PENDING",
     "co2_saved_kg": 2.5,
     "green_points_to_earn": 50,
-    "pickup_window": "14:00 - 15:00"
+    "pickup_deadline": "2026-10-16T15:00:00Z"
   }
   ```
 
-### 6.2. Lấy Mã QR Xác nhận Đơn hàng (Consumer App)
+---
+
+## 6. Feature 6: Seamless Cashless Checkout (VNPay Payment Gateway)
+
+### 6.1. Khởi tạo URL Thanh toán VNPay (Generate VNPay Payment URL)
+- **Method & Path**: `POST /payments/vnpay/create-url`
+- **Quyền hạn**: `CONSUMER`
+- **Request Body**:
+  ```json
+  {
+    "order_id": "8b7e2c14-...",
+    "bank_code": "VNPAYQR"  // Tuỳ chọn: "VNPAYQR", "NCB", "VCOMBANK"...
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "payment_url": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=2200000&vnp_Command=pay&vnp_CreateDate=20261016140500&vnp_CurrCode=VND&vnp_IpAddr=127.0.0.1&vnp_Locale=vn&vnp_OrderInfo=Thanh+toan+don+hang+EB-20261016-9981&vnp_OrderType=food&vnp_ReturnUrl=...&vnp_TmnCode=...&vnp_TxnRef=...&vnp_Version=2.1.0&vnp_SecureHash=7f6a..."
+  }
+  ```
+
+### 6.2. Webhook IPN Server-to-Server từ VNPay (Idempotent Webhook Handler)
+- **Method & Path**: `GET /payments/vnpay/ipn`
+- **Quyền hạn**: Public (Được bảo vệ bởi chữ ký bí mật HMAC-SHA512 `vnp_SecureHash`)
+- **Query Parameters**: Nhận toàn bộ query parameters chuẩn từ VNPay (`vnp_TxnRef`, `vnp_Amount`, `vnp_ResponseCode`, `vnp_TransactionNo`, `vnp_SecureHash`...)
+- **Quy trình xử lý**:
+  1. Kiểm tra chữ ký HMAC-SHA512.
+  2. Kiểm tra Idempotent: Giao dịch đã xử lý chưa.
+  3. Cập nhật `orders.payment_status = 'PAID'`.
+- **Response**:
+  ```json
+  {
+    "RspCode": "00",
+    "Message": "Confirm Success"
+  }
+  ```
+
+---
+
+## 7. Feature 7: Dynamic HMAC-SHA256 Single-Use QR Token & In-Store Web Scanner
+
+### 7.1. Lấy Mã QR Nhận Món Động (Dynamic HMAC-SHA256 Token)
 - **Method & Path**: `GET /orders/{order_id}/qr-token`
 - **Quyền hạn**: `CONSUMER` (Chính chủ đơn hàng)
 - **Response (200 OK)**:
   ```json
   {
     "order_code": "EB-20261016-9981",
-    "qr_token": "ecobite://pickup?oid=8b7e2c14&nonce=7a8b...&sig=9f3d...",
+    "qr_token": "ecobite://pickup?oid=8b7e2c14&nonce=7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d&deadline=1760626800&sig=9f3d5c6b7a8e...",
     "expires_at": "2026-10-16T15:00:00Z"
   }
   ```
 
-### 6.3. Đối tác Quét Mã QR Xác nhận Giao Món (Partner Scanner)
+### 7.2. Chủ Quán Dùng Camera Web Quét Xác Nhận Đơn (In-Store Camera Scanner)
 - **Method & Path**: `POST /orders/verify-qr`
 - **Quyền hạn**: `STORE_PARTNER`
 - **Request Body**:
   ```json
   {
-    "qr_token": "ecobite://pickup?oid=8b7e2c14&nonce=7a8b...&sig=9f3d..."
+    "qr_token": "ecobite://pickup?oid=8b7e2c14&nonce=7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d&deadline=1760626800&sig=9f3d5c6b7a8e..."
   }
   ```
 - **Response (200 OK)**:
@@ -503,44 +435,31 @@ Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, 
   {
     "success": true,
     "order_code": "EB-20261016-9981",
-    "customer_name": "Nguyễn Văn A",
-    "dish_name": "Cơm gà xối mỡ sốt cay",
     "status": "COMPLETED",
     "points_awarded": 50,
-    "message": "Xác thực đơn hàng thành công! Đã giao món ăn cho khách."
+    "co2_saved_kg": 2.5,
+    "message": "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công và cộng 50 Điểm Xanh cho khách."
   }
   ```
 
 ---
 
-## 7. Đánh giá Món ăn (Reviews)
+## 8. Feature 8: Verified Reviews, Green Points & Environmental Impact Tracker
 
-### 7.1. Gửi Đánh giá Sau Khi Lấy Món
+### 8.1. Đánh giá Món ăn Sau Khi Nhận (Verified Reviews)
 - **Method & Path**: `POST /orders/{order_id}/review`
-- **Quyền hạn**: `CONSUMER` (Đơn hàng phải là `COMPLETED`)
+- **Quyền hạn**: `CONSUMER` (Đơn hàng phải ở trạng thái `COMPLETED`)
 - **Request Body**:
   ```json
   {
     "rating": 5,
-    "comment": "Cơm gà giòn ngon, còn nóng hổi, rất đáng tiền!",
-    "tags": ["Tươi ngon", "Đóng gói kỹ", "Đúng giờ"],
-    "photo_urls": ["https://cdn.ecobite.vn/reviews/com_ga_rev.jpg"]
-  }
-  ```
-- **Response (201 Created)**:
-  ```json
-  {
-    "review_id": "7d2b1f89-...",
-    "rating": 5,
-    "store_new_rating_avg": 4.95
+    "comment": "Cơm sườn mềm thơm, còn nóng hổi, chả rất ngon!",
+    "tags": ["Tươi ngon", "Đóng gói kỹ", "Nóng sốt"],
+    "photo_urls": ["https://cdn.ecobite.vn/reviews/com_suon_real.jpg"]
   }
   ```
 
----
-
-## 8. Điểm Xanh & Đổi Voucher (Green Points & Rewards)
-
-### 8.1. Lấy Thông tin Điểm Xanh & Lịch sử Đóng góp Môi trường
+### 8.2. Tra cứu Số Dư Điểm Xanh & Lượng Phát Thải $CO_2$ Cắt Giảm
 - **Method & Path**: `GET /green-points/me`
 - **Quyền hạn**: `CONSUMER`
 - **Response (200 OK)**:
@@ -555,13 +474,13 @@ Chủ quán gửi file ghi âm ngắn (Native Audio) hoặc văn bản tự do, 
         "points": +50,
         "action": "ORDER_RESCUE",
         "co2_saved_kg": 2.5,
-        "date": "2026-10-16T14:30:00Z"
+        "created_at": "2026-10-16T14:30:00Z"
       }
     ]
   }
   ```
 
-### 8.2. Đổi Điểm Lấy Voucher Giảm Giá
+### 8.3. Đổi Điểm Xanh Lấy Voucher Giảm Giá
 - **Method & Path**: `POST /vouchers/{voucher_id}/redeem`
 - **Quyền hạn**: `CONSUMER`
 - **Response (200 OK)**:

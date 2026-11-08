@@ -21,11 +21,15 @@ Mỗi khi người dùng yêu cầu thêm tính năng, sửa bug hoặc tái c�
 - Xác định rõ vai trò truy cập (Role: `CONSUMER`, `STORE_PARTNER`, `ADMIN`) và các trường hợp biên (Edge Cases: mạng lag, trùng đơn, toạ độ âm, hết hàng).
 
 ### Bước 2: Viết Kiểm thử Song song hoặc Trước (Test-First / TDD)
-- Mọi hàm nghiệp vụ mới trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/`.
+- Mọi thao tác dữ liệu trong `backend/app/repositories/`, hàm nghiệp vụ trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/`.
 - Mọi component có logic quan trọng hoặc hook trong `frontend/src/` phải có test trong `frontend/__tests__/`.
 
 ### Bước 3: Viết Mã Nguồn Tinh gọn (Clean Code Implementation)
-- **Backend**: Tuân thủ FastAPI async/await, Pydantic v2 validation, SQLAlchemy 2.0 type annotations (`Mapped[T]`), không dùng hàm đồng bộ (blocking I/O) trong async router.
+- **Backend (Kiến trúc 3 tầng `Router -> Service -> Repository`)**:
+  - `backend/app/api/v1/endpoints/`: Tầng HTTP Router (xử lý request/response, RBAC `require_roles`, không chứa câu lệnh SQL).
+  - `backend/app/services/`: Tầng Nghiệp vụ (xử lý logic tính giá giờ chót, kiểm tra quyền sở hữu, điều phối giao dịch, gọi xuống Repository).
+  - `backend/app/repositories/`: Tầng Truy xuất Dữ liệu (`*_repo.py`, chỉ chứa các câu lệnh truy vấn SQLAlchemy 2.0 `AsyncSession` và Atomic Update).
+  - Tuân thủ FastAPI async/await, Pydantic v2 validation, SQLAlchemy 2.0 type annotations (`Mapped[T]`), không dùng hàm đồng bộ (blocking I/O) trong async router.
 - **Frontend**: Next.js 14 App Router, Client Component chỉ đánh dấu `'use client'` khi có tương tác (state, hook, browser API), còn lại ưu tiên Server Components.
 - **Machine Learning**: Tuyệt đối không load model `.pt` trong request body. Sử dụng cơ chế Lifespan Singleton nạp từ `app.state.ml_model` với `torch.no_grad()`.
 
@@ -71,7 +75,7 @@ npm run type-check
 
 1. ❌ **CẤM COMMIT SECRETS**: Tuyệt đối không đọc, ghi hoặc commit file `.env`, token, key bảo mật vào git staging. Luôn sử dụng biến môi trường qua `pydantic-settings`.
 2. ❌ **CẤM HARDCODE TOẠ ĐỘ & QUYỀN**: Mọi logic vị trí địa lý phải thông qua hàm PostGIS `ST_DWithin` hoặc `ST_Distance`. Mọi API nhạy cảm phải bọc Dependency phân quyền `require_roles(...)`.
-3. ❌ **BẢO MẬT MÃ QR**: Mã QR xác nhận đơn hàng phải dùng thuật toán HMAC-SHA256, có thời hạn hiệu lực (`expires_at`), và phải kiểm tra cờ `is_used` để chống Replay Attack (quét 2 lần).
+3. ❌ **BẢO MẬT MÃ QR & THANH TOÁN VNPAY**: Mã QR xác nhận đơn hàng phải dùng thuật toán HMAC-SHA256, có thời hạn hiệu lực (`expires_at`), và phải kiểm tra cờ `is_used` để chống Replay Attack (quét 2 lần). Webhook VNPay IPN bắt buộc xác thực chữ ký HMAC-SHA512 và xử lý idempotent chống ghi nhận giao dịch trùng lặp.
 4. ❌ **CHỐNG OVER-SELLING (TRANH CHẤP TỒN KHO MÓN ĂN)**: Khi trừ số lượng món ăn `remaining_quantity` trong bảng `dishes`, bắt buộc sử dụng DB Transaction với Atomic Update (`WHERE remaining_quantity >= :qty`) hoặc Redis Distributed Lock.
 5. ❌ **GIẢM GIÁ THEO KHUNG GIỜ LÀ RULE-BASED**: Tuyệt đối không dùng mô hình AI phỏng đoán giá gây bất định. Luôn tính giá theo luật thời gian xác định (Rule-based: giờ vàng giảm 40-50%, giờ chót giảm 70%).
 6. ❌ **AI GENAI BẢO MẬT & CẤU TRÚC (MENU GROUNDING & 2-TIER ALLERGENS)**: Khi gọi Google Gemini 2.5 Flash, bắt buộc sử dụng Pydantic Schema Structured Output (`QuickPostExtractionResponse`). Rà soát dị ứng bắt buộc chia rõ 2 nguồn: `EXPLICIT` (chủ quán đọc trực tiếp) và `INFERRED` (AI suy luận tri thức món Việt theo 14 chuẩn EU FIC). Bắt buộc đối chiếu Thực đơn gốc (`menu_items`) để kế thừa ảnh và giá gốc chuẩn xác.
@@ -82,8 +86,14 @@ npm run type-check
 
 ## 3. Quy chuẩn Đặt tên File & Cấu trúc Thư mục
 
+- **Backend Application Layers (`Router -> Service -> Repository`)**:
+  - `backend/app/api/v1/endpoints/<domain>.py` (Tầng HTTP Router & RBAC)
+  - `backend/app/services/<domain>_service.py` (Tầng Business Logic)
+  - `backend/app/repositories/<domain>_repo.py` (Tầng Data Access / SQLAlchemy 2.0 AsyncSession)
+  - `backend/app/models/<domain>.py` (Tầng ORM Models)
+  - `backend/app/schemas/<domain>.py` (Tầng Pydantic v2 DTOs)
 - **Backend Tests**:
-  - `backend/tests/unit/test_<service_name>.py`
+  - `backend/tests/unit/test_<service_or_repo_name>.py`
   - `backend/tests/integration/test_api_<endpoint>.py`
   - `backend/tests/conftest.py` (Chứa fixtures CSDL test, mock Redis, fake JWT tokens)
 - **Frontend Tests**:
