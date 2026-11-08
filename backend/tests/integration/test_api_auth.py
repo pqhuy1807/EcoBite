@@ -1,7 +1,8 @@
-"""Integration tests for /api/v1/auth endpoints (register + login)."""
+"""Integration tests for /api/v1/auth endpoints (register + login + refresh)."""
 
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
+REFRESH_URL = "/api/v1/auth/refresh"
 
 USER_PAYLOAD: dict[str, str] = {
     "email": "consumer@ecobite.vn",
@@ -54,6 +55,47 @@ async def test_login_success_returns_bearer_token(client) -> None:
     body = response.json()
     assert body["token_type"] == "bearer"
     assert body["access_token"]
+    assert body["refresh_token"]
+    assert body["expires_in"] == 3600
+    assert body["user"]["email"] == USER_PAYLOAD["email"]
+    assert body["user"]["role"] == "CONSUMER"
+
+
+async def test_login_with_json_payload_success(client) -> None:
+    """Frontend React calls /auth/login with JSON body { email, password }."""
+    await client.post(REGISTER_URL, json=USER_PAYLOAD)
+
+    response = await client.post(
+        LOGIN_URL,
+        json={"email": USER_PAYLOAD["email"], "password": USER_PAYLOAD["password"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["token_type"] == "bearer"
+    assert body["access_token"]
+    assert body["refresh_token"]
+    assert body["user"]["full_name"] == USER_PAYLOAD["full_name"]
+
+
+async def test_login_refresh_token_flow(client) -> None:
+    """Validate exchanging refresh token for a new valid access token."""
+    await client.post(REGISTER_URL, json=USER_PAYLOAD)
+
+    login_resp = await client.post(
+        LOGIN_URL,
+        json={"email": USER_PAYLOAD["email"], "password": USER_PAYLOAD["password"]},
+    )
+    refresh_token = login_resp.json()["refresh_token"]
+
+    refresh_resp = await client.post(
+        REFRESH_URL,
+        json={"refresh_token": refresh_token},
+    )
+    assert refresh_resp.status_code == 200
+    refreshed_body = refresh_resp.json()
+    assert refreshed_body["access_token"]
+    assert refreshed_body["user"]["email"] == USER_PAYLOAD["email"]
 
 
 async def test_login_wrong_password_returns_401(client) -> None:

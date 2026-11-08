@@ -35,7 +35,19 @@ def create_access_token(
     """
     now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    payload: dict[str, Any] = {"sub": str(subject), "iat": now, "exp": expire}
+    payload: dict[str, Any] = {"sub": str(subject), "iat": now, "exp": expire, "type": "access"}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_refresh_token(
+    subject: str | Any,
+    *,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Create a signed JWT refresh token (defaults to 7 days)."""
+    now = datetime.now(UTC)
+    expire = now + (expires_delta or timedelta(days=7))
+    payload: dict[str, Any] = {"sub": str(subject), "iat": now, "exp": expire, "type": "refresh"}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

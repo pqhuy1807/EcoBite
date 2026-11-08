@@ -1,9 +1,12 @@
 """Repository for Store persistence and spatial coordinate handling."""
 
+import math
 import re
 import uuid
 
-from sqlalchemy import select
+from geoalchemy2 import Geography
+from geoalchemy2.functions import ST_Distance, ST_DWithin
+from sqlalchemy import cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -35,6 +38,27 @@ def parse_point_wkt(location: object) -> tuple[float, float]:
         return float(point.y), float(point.x)
     except Exception:
         return 10.776889, 106.700806
+
+
+def haversine_distance_meters(
+    lat1: float,
+    lng1: float,
+    lat2: float,
+    lng2: float,
+) -> float:
+    """Compute exact spherical geodesic distance in meters between two WGS84 points."""
+    earth_radius_m = 6_371_000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lng2 - lng1)
+
+    a = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return round(earth_radius_m * c, 1)
 
 
 async def create(
@@ -108,3 +132,52 @@ async def list_approved_stores(db: AsyncSession) -> list[Store]:
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def list_nearby_approved_stores(
+    db: AsyncSession,
+    lat: float,
+    lng: float,
+    radius_km: float = 3.0,
+) -> list[tuple[Store, float]]:
+    """List approved stores within radius_km, returning pairs of (Store, distance_meters).
+
+    Uses PostGIS ST_DWithin and ST_Distance on PostgreSQL (Guardrail #2) for sub-100ms spatial
+    queries leveraging the spatial GIST index.
+    Falls back gracefully to spherical Haversine computation on SQLite (for test suites).
+    """
+    max_distance_m = radius_km * 1000.0
+    bind = db.bind or getattr(db, "_bind", None)
+    dialect_name = bind.dialect.name if bind is not None else ""
+
+    if dialect_name == "postgresql":
+        user_geo = cast(
+            func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326),
+            Geography,
+        )
+        store_geo = cast(Store.location, Geography)
+        dist_expr = ST_Distance(store_geo, user_geo).label("distance_meters")
+
+        stmt = (
+            select(Store, dist_expr)
+            .where(
+                Store.kyc_status == KycStatus.APPROVED,
+                ST_DWithin(store_geo, user_geo, max_distance_m),
+            )
+            .options(selectinload(Store.dishes))
+            .order_by(dist_expr)
+            .execution_options(populate_existing=True)
+        )
+        result = await db.execute(stmt)
+        return [(row[0], float(row[1])) for row in result.all()]
+
+    # SQLite fallback for in-memory integration testing
+    approved_stores = await list_approved_stores(db)
+    nearby_list: list[tuple[Store, float]] = []
+    for store in approved_stores:
+        store_lat, store_lng = parse_point_wkt(store.location)
+        dist = haversine_distance_meters(lat, lng, store_lat, store_lng)
+        if dist <= max_distance_m:
+            nearby_list.append((store, dist))
+    nearby_list.sort(key=lambda item: item[1])
+    return nearby_list

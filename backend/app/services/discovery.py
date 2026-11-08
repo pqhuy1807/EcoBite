@@ -1,6 +1,5 @@
 """Spatial Discovery Service (PostGIS ST_DWithin / Haversine Radar Search)."""
 
-import math
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,27 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.dish import DishStatus
 from app.repositories import store_repo
 from app.services.dish_service import DishService
-
-
-def haversine_distance_meters(
-    lat1: float,
-    lng1: float,
-    lat2: float,
-    lng2: float,
-) -> float:
-    """Compute exact spherical geodesic distance in meters between two WGS84 points."""
-    earth_radius_m = 6_371_000.0
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lng2 - lng1)
-
-    a = (
-        math.sin(delta_phi / 2.0) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
-    )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-    return round(earth_radius_m * c, 1)
 
 
 class DiscoveryService:
@@ -45,16 +23,17 @@ class DiscoveryService:
         category: str | None = None,
     ) -> dict[str, Any]:
         """Truy vấn các cửa hàng APPROVED trong bán kính chỉ định và trả về món đang mở bán."""
-        approved_stores = await store_repo.list_approved_stores(self.db)
-        max_distance_m = radius_km * 1000.0
+        nearby_stores = await store_repo.list_nearby_approved_stores(
+            self.db,
+            lat=lat,
+            lng=lng,
+            radius_km=radius_km,
+        )
         category_upper = category.upper() if category else None
 
         results: list[dict[str, Any]] = []
-        for store in approved_stores:
+        for store, dist_m in nearby_stores:
             store_lat, store_lng = store_repo.parse_point_wkt(store.location)
-            dist_m = haversine_distance_meters(lat, lng, store_lat, store_lng)
-            if dist_m > max_distance_m:
-                continue
 
             active_dishes: list[dict[str, Any]] = []
             for d in store.dishes:
