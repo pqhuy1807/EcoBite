@@ -19,7 +19,7 @@ class MenuService:
 
     async def get_store_menu_items(self, store_id: uuid.UUID) -> list[MenuItem]:
         """List active canonical menu items belonging to the store."""
-        store = await store_repo.get_by_id(self.db, store_id)
+        store = await store_repo.get_store_by_id(self.db, store_id)
         if store is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
         return await menu_repo.list_by_store(self.db, store_id, active_only=True)
@@ -30,7 +30,7 @@ class MenuService:
         item_data: dict[str, Any],
     ) -> MenuItem:
         """Add a canonical menu item to an approved store."""
-        store = await store_repo.get_by_id(self.db, store_id)
+        store = await store_repo.get_store_by_id(self.db, store_id)
         if store is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
         if store.kyc_status != KycStatus.APPROVED:
