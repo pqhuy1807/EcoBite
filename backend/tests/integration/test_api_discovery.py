@@ -69,7 +69,7 @@ async def _setup_approved_store_with_dish(
     )
     menu_item_id = menu_resp.json()["id"]
 
-    await client.post(
+    dish_resp = await client.post(
         "/api/v1/dishes",
         json={
             "menu_item_id": menu_item_id,
@@ -79,7 +79,7 @@ async def _setup_approved_store_with_dish(
         },
         headers={"Authorization": f"Bearer {partner_token}"},
     )
-    return store_id
+    return {"store_id": store_id, "dish_id": str(dish_resp.json()["id"])}
 
 
 async def test_discovery_nearby_stores_success(client: AsyncClient) -> None:
@@ -151,3 +151,57 @@ async def test_discovery_nearby_stores_with_category_filter(client: AsyncClient)
     )
     assert resp_rice.status_code == 200
     assert resp_rice.json()["total"] == 0
+
+
+async def test_discovery_nearby_rejects_radius_out_of_bounds(client: AsyncClient) -> None:
+    """Bán kính radar nằm trong biên 1-10km: dưới 1km hoặc trên 10km lỗi 422."""
+    for radius in (0.5, 10.5):
+        response = await client.get(
+            "/api/v1/stores/nearby",
+            params={"lat": 10.7769, "lng": 106.7009, "radius_km": radius},
+        )
+        assert response.status_code == 422
+
+
+async def test_discovery_nearby_rejects_unknown_category(client: AsyncClient) -> None:
+    """Category ngoài 6 danh mục chuẩn phải báo lỗi validate 422."""
+    response = await client.get(
+        "/api/v1/stores/nearby",
+        params={"lat": 10.7769, "lng": 106.7009, "category": "DIET"},
+    )
+    assert response.status_code == 422
+
+
+async def test_discovery_nearby_excludes_sold_out_dish(client: AsyncClient) -> None:
+    """Quán hết số suất dư thừa (SOLD_OUT) phải trả về với danh sách dishes rỗng."""
+    partner_token = await _register_and_login(client, "partner_soldout@ecobite.vn", "store_partner")
+    admin_token = await _register_and_login(client, "admin_soldout@ecobite.vn", "admin")
+
+    setup = await _setup_approved_store_with_dish(
+        client,
+        partner_token,
+        admin_token,
+        name="Gánh Bánh Nguyễn Thông",
+        lat=10.7768,
+        lng=106.7008,
+        dish_name="Bánh tiêu xả ca",
+        category="BAKERY",
+    )
+
+    # Xả sạch tồn kho ca: đặt remaining_quantity = 0 -> chuyển trạng thái SOLD_OUT
+    response = await client.patch(
+        f"/api/v1/dishes/{setup['dish_id']}/quantity",
+        json={"quantity": 0},
+        headers={"Authorization": f"Bearer {partner_token}"},
+    )
+    assert response.status_code == 200
+
+    nearby = await client.get(
+        "/api/v1/stores/nearby",
+        params={"lat": 10.7769, "lng": 106.7009, "radius_km": 3.0},
+    )
+    assert nearby.status_code == 200
+    data = nearby.json()
+    # Quán vẫn hiển thị trong bản đồ nhưng không còn suất ăn nào để mở bán
+    assert data["total"] == 1
+    assert data["results"][0]["dishes"] == []
