@@ -37,7 +37,7 @@ async def search_nearby_stores(
     lng: Annotated[float, Query(ge=-180.0, le=180.0, description="Kinh độ người dùng")],
     radius_km: Annotated[
         float,
-        Query(gt=0.0, le=50.0, description="Bán kính tìm kiếm (km)"),
+        Query(ge=1.0, le=10.0, description="Bán kính tìm kiếm (km), biên chuẩn 1-10km"),
     ] = 3.0,
     category: Annotated[str | None, Query(description="Lọc theo danh mục món ăn")] = None,
 ) -> dict[str, Any]:
