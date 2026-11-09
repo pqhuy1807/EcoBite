@@ -2,11 +2,16 @@
 
 from typing import Any
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dish import DishStatus
+from app.models.menu_item import ItemCategory
 from app.repositories import store_repo
 from app.services.dish_service import DishService
+
+MIN_RADIUS_KM = 1.0
+MAX_RADIUS_KM = 10.0
 
 
 class DiscoveryService:
@@ -22,14 +27,27 @@ class DiscoveryService:
         radius_km: float = 3.0,
         category: str | None = None,
     ) -> dict[str, Any]:
-        """Truy vấn các cửa hàng APPROVED trong bán kính chỉ định và trả về món đang mở bán."""
-        nearby_stores = await store_repo.list_nearby_approved_stores(
+        """Truy vấn các cửa hàng trong bán kính chỉ định và trả về món đang mở bán."""
+        if not (MIN_RADIUS_KM <= radius_km <= MAX_RADIUS_KM):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"radius_km phải nằm trong biên {MIN_RADIUS_KM:.0f}-{MAX_RADIUS_KM:.0f} km",
+            )
+
+        category_upper = category.upper() if category else None
+        if category_upper is not None and category_upper not in ItemCategory.__members__:
+            valid_categories = " / ".join(c.value for c in ItemCategory)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"category phải thuộc 6 danh mục chuẩn: {valid_categories}",
+            )
+
+        nearby_stores = await store_repo.list_nearby_stores(
             self.db,
             lat=lat,
             lng=lng,
             radius_km=radius_km,
         )
-        category_upper = category.upper() if category else None
 
         results: list[dict[str, Any]] = []
         for store, dist_m in nearby_stores:

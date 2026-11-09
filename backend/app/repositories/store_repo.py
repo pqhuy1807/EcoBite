@@ -61,7 +61,7 @@ def haversine_distance_meters(
     return round(earth_radius_m * c, 1)
 
 
-async def create(
+async def create_store(
     db: AsyncSession,
     *,
     owner_id: uuid.UUID,
@@ -92,22 +92,21 @@ async def create(
     return store
 
 
-async def get_by_id(db: AsyncSession, store_id: uuid.UUID) -> Store | None:
-    """Retrieve a store by primary key UUID."""
+async def get_store_by_id(db: AsyncSession, store_id: uuid.UUID) -> Store | None:
+    """Retrieve a store by primary key UUID, or None when missing."""
     return await db.get(Store, store_id)
 
 
-async def list_by_kyc_status(
-    db: AsyncSession,
-    kyc_status: KycStatus = KycStatus.PENDING,
-) -> list[Store]:
-    """Return all stores matching a specific KYC status, ordered by creation time."""
-    stmt = select(Store).where(Store.kyc_status == kyc_status).order_by(Store.created_at.desc())
+async def get_pending_stores(db: AsyncSession) -> list[Store]:
+    """Return all stores waiting for KYC review (PENDING), newest first."""
+    stmt = (
+        select(Store).where(Store.kyc_status == KycStatus.PENDING).order_by(Store.created_at.desc())
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
-async def update_kyc_status(
+async def update_store_status(
     db: AsyncSession,
     store: Store,
     *,
@@ -122,25 +121,22 @@ async def update_kyc_status(
     return store
 
 
-async def list_approved_stores(db: AsyncSession) -> list[Store]:
-    """Return all KYC-approved stores (with relationships loaded via selectin)."""
+async def list_stores(db: AsyncSession) -> list[Store]:
+    """Return all stores regardless of KYC status (with dishes eagerly loaded)."""
     stmt = (
-        select(Store)
-        .where(Store.kyc_status == KycStatus.APPROVED)
-        .options(selectinload(Store.dishes))
-        .execution_options(populate_existing=True)
+        select(Store).options(selectinload(Store.dishes)).execution_options(populate_existing=True)
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
-async def list_nearby_approved_stores(
+async def list_nearby_stores(
     db: AsyncSession,
     lat: float,
     lng: float,
     radius_km: float = 3.0,
 ) -> list[tuple[Store, float]]:
-    """List approved stores within radius_km, returning pairs of (Store, distance_meters).
+    """List stores within radius_km, returning pairs of (Store, distance_meters).
 
     Uses PostGIS ST_DWithin and ST_Distance on PostgreSQL (Guardrail #2) for sub-100ms spatial
     queries leveraging the spatial GIST index.
@@ -161,7 +157,6 @@ async def list_nearby_approved_stores(
         stmt = (
             select(Store, dist_expr)
             .where(
-                Store.kyc_status == KycStatus.APPROVED,
                 ST_DWithin(store_geo, user_geo, max_distance_m),
             )
             .options(selectinload(Store.dishes))
@@ -172,9 +167,9 @@ async def list_nearby_approved_stores(
         return [(row[0], float(row[1])) for row in result.all()]
 
     # SQLite fallback for in-memory integration testing
-    approved_stores = await list_approved_stores(db)
+    stores = await list_stores(db)
     nearby_list: list[tuple[Store, float]] = []
-    for store in approved_stores:
+    for store in stores:
         store_lat, store_lng = parse_point_wkt(store.location)
         dist = haversine_distance_meters(lat, lng, store_lat, store_lng)
         if dist <= max_distance_m:

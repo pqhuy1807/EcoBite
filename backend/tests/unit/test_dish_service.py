@@ -103,7 +103,7 @@ async def test_dish_repo_atomic_decrement_prevents_overselling(
         full_name="Partner Atomic",
         role=UserRole.STORE_PARTNER,
     )
-    store = await store_repo.create(
+    store = await store_repo.create_store(
         db_session,
         owner_id=partner.id,
         name="Quán Cơm Atomic",

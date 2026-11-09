@@ -62,7 +62,7 @@ class StoreService:
                 detail="Tọa độ GPS không hợp lệ",
             )
 
-        store = await store_repo.create(
+        store = await store_repo.create_store(
             self.db,
             owner_id=partner_id,
             name=name,
@@ -86,7 +86,7 @@ class StoreService:
 
     async def get_store_by_id(self, store_id: UUID) -> dict[str, Any]:
         """Xem chi tiết thông tin cửa hàng và trạng thái kiểm duyệt."""
-        store = await store_repo.get_by_id(self.db, store_id)
+        store = await store_repo.get_store_by_id(self.db, store_id)
         if store is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -96,7 +96,7 @@ class StoreService:
 
     async def get_pending_stores(self) -> dict[str, Any]:
         """Tra cứu danh sách các quán đang chờ duyệt KYC (PENDING)."""
-        stores = await store_repo.list_by_kyc_status(self.db, KycStatus.PENDING)
+        stores = await store_repo.get_pending_stores(self.db)
         items = [_serialize_store(s) for s in stores]
         return {
             "total": len(items),
@@ -116,14 +116,14 @@ class StoreService:
                 detail="Quyết định kiểm duyệt phải là APPROVED hoặc REJECTED",
             )
 
-        store = await store_repo.get_by_id(self.db, store_id)
+        store = await store_repo.get_store_by_id(self.db, store_id)
         if store is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Không tìm thấy cửa hàng cần duyệt",
             )
 
-        updated = await store_repo.update_kyc_status(
+        updated = await store_repo.update_store_status(
             self.db,
             store,
             kyc_status=KycStatus(decision),

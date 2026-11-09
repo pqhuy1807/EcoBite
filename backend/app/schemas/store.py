@@ -3,8 +3,9 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.models.store import KycStatus
 
@@ -17,8 +18,8 @@ class StoreOnboardRequest(BaseModel):
     address: str = Field(..., min_length=5, max_length=500)
     latitude: float = Field(..., ge=-90.0, le=90.0)
     longitude: float = Field(..., ge=-180.0, le=180.0)
-    phone: str = Field(..., max_length=20)
-    kyc_license_url: str = Field(..., max_length=500)
+    phone: str | None = Field(default=None, max_length=20)
+    kyc_license_url: str | None = Field(default=None, max_length=500)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,10 +86,15 @@ class StoreUpdate(BaseModel):
 class StoreKycReview(BaseModel):
     """Schema for Admin to approve or reject merchant KYC."""
 
-    kyc_status: KycStatus = Field(..., description="Trạng thái phê duyệt: APPROVED hoặc REJECTED")
-    kyc_reject_reason: str | None = Field(
+    decision: Literal["APPROVED", "REJECTED"] = Field(
+        ...,
+        validation_alias=AliasChoices("decision", "kyc_status"),
+        description="Quyết định kiểm duyệt: APPROVED hoặc REJECTED",
+    )
+    reject_reason: str | None = Field(
         default=None,
-        description="Lý do từ chối (bắt buộc nếu kyc_status là REJECTED)",
+        validation_alias=AliasChoices("reject_reason", "kyc_reject_reason"),
+        description="Lý do từ chối (đưa kèm khi quyết định là REJECTED)",
     )
 
 

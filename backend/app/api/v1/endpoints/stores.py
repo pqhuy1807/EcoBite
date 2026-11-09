@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import DBSession, require_roles
 from app.models.user import User, UserRole
-from app.schemas.store import StoreOnboardRequest
+from app.schemas.store import StoreKycReview, StoreOnboardRequest
 from app.services.discovery import DiscoveryService
 from app.services.store_service import StoreService
 
@@ -37,7 +37,7 @@ async def search_nearby_stores(
     lng: Annotated[float, Query(ge=-180.0, le=180.0, description="Kinh độ người dùng")],
     radius_km: Annotated[
         float,
-        Query(gt=0.0, le=50.0, description="Bán kính tìm kiếm (km)"),
+        Query(ge=1.0, le=10.0, description="Bán kính tìm kiếm (km), biên chuẩn 1-10km"),
     ] = 3.0,
     category: Annotated[str | None, Query(description="Lọc theo danh mục món ăn")] = None,
 ) -> dict[str, Any]:
@@ -78,15 +78,13 @@ async def get_pending_stores(db: DBSession) -> dict[str, Any]:
 )
 async def review_store_kyc(
     store_id: UUID,
-    review_in: dict[str, Any],
+    review_in: StoreKycReview,
     db: DBSession,
 ) -> dict[str, Any]:
     """Quyết định phê duyệt (APPROVED) hoặc từ chối (REJECTED) chứng nhận ATVSTP của quán."""
     service = StoreService(db)
-    decision = str(review_in.get("decision") or review_in.get("kyc_status") or "").upper()
-    reject_reason = review_in.get("reject_reason") or review_in.get("kyc_reject_reason")
     return await service.review_store_kyc(
         store_id=store_id,
-        decision=decision,
-        reject_reason=reject_reason,
+        decision=review_in.decision,
+        reject_reason=review_in.reject_reason,
     )
