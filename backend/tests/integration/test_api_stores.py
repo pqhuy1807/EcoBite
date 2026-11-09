@@ -103,3 +103,95 @@ async def test_admin_review_store_kyc(client: AsyncClient) -> None:
     detail_resp = await client.get(f"/api/v1/stores/{store_id}")
     assert detail_resp.status_code == 200
     assert detail_resp.json()["kyc_status"] == "APPROVED"
+
+
+async def test_store_onboarding_without_optional_fields_succeeds(client: AsyncClient) -> None:
+    """Trường phone / kyc_license_url là tuỳ chọn (khớp nullability của model Store)."""
+    partner_token = await _register_and_login(client, "partner_lite@ecobite.vn", "store_partner")
+
+    response = await client.post(
+        "/api/v1/stores/onboard",
+        json={
+            "name": "Quán Nghiêm Túc",
+            "address": "9 Phạm Ngũ Lão, Q.1, TP.HCM",
+            "latitude": 10.7701,
+            "longitude": 106.6934,
+        },
+        headers={"Authorization": f"Bearer {partner_token}"},
+    )
+    assert response.status_code == 201
+    assert response.json()["kyc_status"] == "PENDING"
+
+
+async def test_partner_cannot_access_admin_pending_list(client: AsyncClient) -> None:
+    """Chỉ ADMIN được phép liệt kê các quán chờ duyệt KYC (Guardrail #2)."""
+    partner_token = await _register_and_login(client, "partner_gate@ecobite.vn", "store_partner")
+
+    response = await client.get(
+        "/api/v1/admin/stores/pending",
+        headers={"Authorization": f"Bearer {partner_token}"},
+    )
+    assert response.status_code == 403
+
+
+async def test_admin_review_rejected_records_reason_and_excludes_pending(
+    client: AsyncClient,
+) -> None:
+    """Từ chối KYC qua schema chuẩn kyc_status/kyc_reject_reason: lưu lý do, rớt khỏi danh chờ."""
+    partner_token = await _register_and_login(client, "partner_rej@ecobite.vn", "store_partner")
+    admin_token = await _register_and_login(client, "admin_rej@ecobite.vn", "admin")
+
+    onboard_resp = await client.post(
+        "/api/v1/stores/onboard",
+        json={
+            "name": "Quán Ngừng Hoạt",
+            "address": "1 Bến Chợ, Q.5, TP.HCM",
+            "latitude": 10.7578,
+            "longitude": 106.6664,
+        },
+        headers={"Authorization": f"Bearer {partner_token}"},
+    )
+    store_id = onboard_resp.json()["id"]
+
+    review_resp = await client.patch(
+        f"/api/v1/admin/stores/{store_id}/review",
+        json={"kyc_status": "REJECTED", "kyc_reject_reason": "Giấy phép hết hiệu lực"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert review_resp.status_code == 200
+    assert review_resp.json()["kyc_status"] == "REJECTED"
+    assert review_resp.json()["reject_reason"] == "Giấy phép hết hiệu lực"
+
+    pending = await client.get(
+        "/api/v1/admin/stores/pending",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert all(item["id"] != store_id for item in pending.json()["items"])
+
+    detail = await client.get(f"/api/v1/stores/{store_id}")
+    assert detail.json()["kyc_reject_reason"] == "Giấy phép hết hiệu lực"
+
+
+async def test_admin_review_requires_valid_decision(client: AsyncClient) -> None:
+    """Body thiếu decision/kyc_status hợp lệ phải trả về lỗi validate 422."""
+    partner_token = await _register_and_login(client, "partner_bad_rev@ecobite.vn", "store_partner")
+    admin_token = await _register_and_login(client, "admin_bad_rev@ecobite.vn", "admin")
+
+    onboard_resp = await client.post(
+        "/api/v1/stores/onboard",
+        json={
+            "name": "Quán Body Xấu",
+            "address": "2 Bến Chợ, Q.5, TP.HCM",
+            "latitude": 10.7580,
+            "longitude": 106.6650,
+        },
+        headers={"Authorization": f"Bearer {partner_token}"},
+    )
+    store_id = onboard_resp.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/admin/stores/{store_id}/review",
+        json={"decision": "MAYBE", "reject_reason": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 422
