@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # Local dev : sqlite+aiosqlite:///./ecobite.db
     DATABASE_URL: str = "sqlite+aiosqlite:///./ecobite.db"
 
+    # --- Redis (cache & distributed locks; redis:7-alpine in docker-compose) --
+    # Never hardcode host/port: everything is env-driven (AGENTS.md guardrail #1).
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_SOCKET_TIMEOUT_SECONDS: float = 2.0
+    REDIS_LOCK_TIMEOUT_SECONDS: int = 10
+
     # --- CORS -----------------------------------------------------------------
     # Accepts either a JSON array or a comma-separated string in .env.
     CORS_ORIGINS: list[str] = [
