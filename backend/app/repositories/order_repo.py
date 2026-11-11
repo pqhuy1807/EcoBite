@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -68,3 +68,33 @@ class OrderRepository:
         await self.db.commit()
         await self.db.refresh(order)
         return order
+
+    async def cancel_if_allowed(
+        self,
+        order_id: uuid.UUID,
+        allowed_statuses: tuple[OrderStatus, ...],
+    ) -> Order | None:
+        """Atomically move an order to CANCELLED, but only from `allowed_statuses`.
+
+        Executes a conditional update:
+            UPDATE orders SET status = 'CANCELLED'
+            WHERE id = :order_id AND status IN (:allowed_statuses)
+
+        The condition makes concurrent cancel requests race for a single winner,
+        so the stock restoration performed by the service right after this call
+        can never run twice (anti double-refund, Guardrail #4 mindset).
+
+        Returns the refreshed Order, or None when the order is missing or already
+        in a non-cancellable state — the service layer maps that to HTTP errors.
+        """
+        stmt = (
+            update(Order)
+            .where(Order.id == order_id, Order.status.in_(allowed_statuses))
+            .values(status=OrderStatus.CANCELLED)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.db.execute(stmt)
+        if getattr(result, "rowcount", 0) == 0:
+            return None
+        await self.db.commit()
+        return await self.get_by_id(order_id)

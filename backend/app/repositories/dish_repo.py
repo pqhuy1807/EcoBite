@@ -104,3 +104,47 @@ async def atomic_decrement_quantity(
     if dish is not None:
         await db.refresh(dish)
     return dish
+
+
+async def atomic_increment_quantity(
+    db: AsyncSession,
+    dish_id: uuid.UUID,
+    quantity: int,
+) -> Dish | None:
+    """Atomically restore remaining_quantity (order cancellation, Guardrail #4).
+
+    Executes:
+        UPDATE dishes
+        SET remaining_quantity = remaining_quantity + :quantity
+        WHERE id = :dish_id
+
+    A dish left at SOLD_OUT because it sold out is re-activated automatically;
+    other statuses (EXPIRED / INACTIVE) are preserved as-is.
+
+    Returns the refreshed Dish, or None when the dish does not exist.
+    """
+    if quantity <= 0:
+        return None
+
+    new_rem = Dish.remaining_quantity + quantity
+    stmt = (
+        update(Dish)
+        .where(Dish.id == dish_id)
+        .values(
+            remaining_quantity=new_rem,
+            status=case(
+                (Dish.status == DishStatus.SOLD_OUT, DishStatus.ACTIVE),
+                else_=Dish.status,
+            ),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    result = await db.execute(stmt)
+    if getattr(result, "rowcount", 0) == 0:
+        return None
+
+    await db.commit()
+    dish = await db.get(Dish, dish_id)
+    if dish is not None:
+        await db.refresh(dish)
+    return dish

@@ -14,7 +14,7 @@
 | Web framework | FastAPI 0.111.0 + Uvicorn 0.30.1 | Entry `app.main:app` (factory `create_app()`), port 8000 |
 | ORM & Migration | SQLAlchemy 2.0.30 (async) + Alembic 1.13.1 | App chạy `asyncpg`; Alembic chạy `psycopg2` qua `settings.sync_database_url` |
 | Database | PostgreSQL 16 + PostGIS 3.4 (`postgis/postgis:16-3.4-alpine`) | GeoAlchemy2 0.15.1 + Shapely; dev/test fallback `sqlite+aiosqlite` |
-| Cache | Redis 7 (`redis:7-alpine`) + redis-py 5.0.6 | Redis có sẵn trong infra, **chưa** có code Redis trong `app/` |
+| Cache | Redis 7 (`redis:7-alpine`) + redis-py 5.0.6 | Async client & distributed lock tại `app/core/redis.py`; cấu hình qua biến môi trường (`REDIS_URL`, `REDIS_LOCK_TIMEOUT_SECONDS`, `REDIS_SOCKET_TIMEOUT_SECONDS`) |
 | Auth | python-jose 3.3.0 + passlib/bcrypt 4.0.1 | JWT HS256, dual token access/refresh |
 | GenAI | google-genai 1.3.0 (`gemini-2.5-flash`) | Structured Output bọc trong `app/schemas/nlp.py` |
 | ML runtime | torch 2.3.1 + torchvision 0.18.1 | Chỉ suy luận (inference); huấn luyện tách rời trong `ml/` (ultralytics, jupyterlab...) |
@@ -129,13 +129,13 @@ pre-commit run --all-files
   - `backend/app/models/<domain>.py` — Tầng ORM Models (`Mapped[T]`, UUID PK). Hiện tại: `user`, `store`, `menu_item`, `dish`, `order`, `interaction`, `gamification`.
   - `backend/app/schemas/<domain>.py` — Tầng Pydantic v2 DTOs. Hiện tại: `user`, `token`, `store`, `menu_item`, `dish`, `order`, `nlp`, `gamification`, `interaction`, `user_preference`.
 - **Hạ tầng nội bộ backend**:
-  - `backend/app/core/` — `config.py` (`pydantic-settings`), `security.py` (JWT/passlib), `logging.py`.
+  - `backend/app/core/` — `config.py` (`pydantic-settings`), `security.py` (JWT/passlib), `logging.py`, `redis.py` (async Redis client lười + `distributed_lock`: `SET NX EX` + Lua compare-and-delete; Redis chết thì degrade an toàn, DB atomic update vẫn là backstop cuối).
   - `backend/app/db/` — `base.py` (Metadata), `session.py` (`get_db`), `seed.py` (seed dữ liệu demo).
   - `backend/alembic/` — các migration nằm trong `versions/` (migration đầu tiên dựng schema đầy đủ 12 bảng; migration kiểu PostGIS phải giữ tính portable trên SQLite như file mẫu).
 - **Backend Tests**:
   - `backend/tests/unit/test_<service_or_repo_name>.py` (kèm `test_security.py`, `test_nlp_schemas.py`).
   - `backend/tests/integration/test_api_<endpoint>.py`.
-  - `backend/tests/conftest.py` — fixtures chuẩn: SQLite in-memory (`db_engine`, `db_session`), override `get_db`, HTTP client (ASGI), giả lập JWT qua headers `Authorization` (`store_partner`, `other_store_partner`). ⚠️ Hiện **chưa** có mock Redis — bổ sung fixture Redis khi được code; chỉ thêm fixture mới khi test thật sự cần.
+  - `backend/tests/conftest.py` — fixtures chuẩn: SQLite in-memory (`db_engine`, `db_session`), override `get_db`, HTTP client (ASGI), giả lập JWT qua headers `Authorization` (`store_partner`, `other_store_partner`). ⚠️ Chưa có mock Redis dùng chung trong conftest: test lock dùng fake client nội bộ tại `tests/unit/test_redis_lock.py`; service test chạy ở chế độ degrade (không có Redis server → DB atomic update là backstop). Chỉ thêm fixture mới khi test thật sự cần.
 - **Cấu hình công cụ** tập trung tại `backend/pyproject.toml` và `backend/requirements.txt`. Không thêm cấu hình pytest/ruff/mypy ở file khác.
 
 ### 3.2 Frontend (`frontend/`)
@@ -180,9 +180,9 @@ pre-commit run --all-files
 
 ---
 
-## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-10)
+## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-11)
 
-- **Backend**: đã có auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes + `DiscoveryService` (PostGIS), seed 12 bảng và 1 migration Alembic. Model/Repo/Schema cho `order` (đầy đủ trường token QR HMAC và đối chiếu VNPay) đã sẵn sàng, nhưng **chưa có** order service, order endpoint, QR confirm API, VNPay webhook, Redis service và `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
+- **Backend**: đã có auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes + `DiscoveryService` (PostGIS), seed 12 bảng và 1 migration Alembic. **Mới (2026-11-11)**: `OrderService` tại `app/services/order_service.py` — `create_rescue_order` (check ACTIVE + khung giờ đón món → Redis lock `lock:dish:{dish_id}` → `dish_repo.atomic_decrement_quantity` → co2/green-points → mã `EB-YYYYMMDD-XXXXXXXX` có retry) và `cancel_order` (hủy nguyên tử 1-winner qua `OrderRepository.cancel_if_allowed` + hoàn kho qua `dish_repo.atomic_increment_quantity`); kèm Redis helper `app/core/redis.py` + biến env `REDIS_URL`/`REDIS_LOCK_TIMEOUT_SECONDS`/`REDIS_SOCKET_TIMEOUT_SECONDS` (đã cập nhật `backend/.env.example`). Vẫn **chưa có**: order endpoint (router API), QR confirm API, VNPay webhook, `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
 - **Frontend**: giai đoạn skeleton — `components`, `services`, `types`, `providers` đã có; **chưa có** `src/app` (App Router), **chưa có** `src/lib/api-client.ts`, **chưa cấu hình** test runner (mục 1, Bước 2).
 - Bất kỳ thay đổi nào làm lệch cấu trúc/lệnh trong file này (đổi venv, đổi tên tầng, thêm công cụ validation) phải **cập nhật lại `AGENTS.md`** ngay trong cùng commit.
 
