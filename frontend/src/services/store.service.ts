@@ -29,11 +29,8 @@ export const storeService = {
         formData.append('license_number', payload.license_number);
         formData.append('certificate_file', payload.certificate_file);
 
-        const { data } = await apiClient.post<StoreProfile>('/stores/kyc', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        // Không cần gán cứng Content-Type, axios sẽ tự sinh boundary cho multipart/form-data
+        const { data } = await apiClient.post<StoreProfile>('/stores/kyc', formData);
         return data;
     },
 
