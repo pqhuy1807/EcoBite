@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # --- Dynamic QR Token (HMAC-SHA256, Guardrail #3) ------------------------
+    # Read from environment / .env (falls back to SECRET_KEY when unset).
+    QR_SIGNATURE_SECRET: str | None = None
+    QR_TOKEN_VALIDITY_MINUTES: int = 60
+
     # --- Database (async driver used by the app) ------------------------------
     # Postgres  : postgresql+asyncpg://user:pass@host:5432/db
     # Local dev : sqlite+aiosqlite:///./ecobite.db
@@ -59,6 +64,14 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @property
+    def qr_signing_key(self) -> str:
+        """Return the HMAC-SHA256 secret key for pickup QR tokens from settings."""
+        key = self.SECRET_KEY if self.QR_SIGNATURE_SECRET is None else self.QR_SIGNATURE_SECRET
+        if not key or not key.strip():
+            raise ValueError("QR signing secret must be configured and non-empty")
+        return key
 
     @property
     def sync_database_url(self) -> str:
