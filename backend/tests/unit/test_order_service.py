@@ -22,6 +22,10 @@ from app.schemas.order import OrderCreate
 from app.services import order_service
 from app.services.order_service import OrderService
 
+# Module-level singletons for argument defaults (avoids bugbear B008 call-in-default).
+ALL_DAY_START = time(0, 0)
+ALL_DAY_END = time(23, 59)
+
 # Mốc thời gian cố định (17:30 ngày 30/03/2026) để test không phụ thuộc đồng hồ thực.
 FIXED_NOW = datetime(2026, 3, 30, 17, 30)
 
@@ -36,8 +40,8 @@ async def _seed_rescue_dish(
     *,
     dish_status: DishStatus = DishStatus.ACTIVE,
     remaining_quantity: int = 4,
-    pickup_start: time = time(0, 0),
-    pickup_end: time = time(23, 59),
+    pickup_start: time = ALL_DAY_START,
+    pickup_end: time = ALL_DAY_END,
     rule_discount_start_time: time | None = None,
     override_discounted_price: Decimal | None = None,
 ) -> tuple[Dish, uuid.UUID]:
@@ -407,5 +411,101 @@ async def test_cancel_order_allows_ready_for_pickup(db_session: AsyncSession) ->
     await OrderRepository(db_session).update_status(order.id, OrderStatus.READY_FOR_PICKUP)
 
     cancelled = await service.cancel_order(order.id, consumer_id)
+
+    assert cancelled.status == OrderStatus.CANCELLED
+
+
+# ==============================================================================
+# 3. cancel_order — phân quyền chủ quán (STORE_PARTNER) & hạn chót lấy món
+# ==============================================================================
+
+
+async def test_cancel_order_allows_the_store_owner_of_the_dish(
+    db_session: AsyncSession,
+) -> None:
+    """Chủ cửa hàng bán món (STORE_PARTNER) được hủy đơn của khách tại quán mình."""
+    dish, consumer_id = await _seed_rescue_dish(db_session, remaining_quantity=4)
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id, OrderCreate(dish_id=dish.id, quantity=2), now=FIXED_NOW
+    )
+
+    cancelled = await service.cancel_order(order.id, store.owner_id, now=FIXED_NOW)
+
+    assert cancelled.id == order.id
+    assert cancelled.status == OrderStatus.CANCELLED
+    refreshed = await dish_repo.get_by_id(db_session, dish.id)
+    assert refreshed is not None
+    assert refreshed.remaining_quantity == 4  # 2 còn lại + 2 suất hoàn về kho
+
+
+async def test_cancel_order_403_when_partner_owns_a_different_store(
+    db_session: AsyncSession,
+) -> None:
+    """Đối tác của quán khác không được hủy đơn của quán mình."""
+    dish, consumer_id = await _seed_rescue_dish(db_session, remaining_quantity=3)
+    stranger = User(
+        email=f"stranger-{uuid.uuid4().hex[:10]}@ecobite.vn",
+        hashed_password="not-used-by-tests",
+        full_name="Chủ Quán Lân Cận",
+        role=UserRole.STORE_PARTNER,
+    )
+    db_session.add(stranger)
+    await db_session.flush()
+    stranger_store = Store(
+        owner_id=stranger.id,
+        name="Quán Phở Quanh Đường",
+        address="88 Đường Láng, Đống Đa, Hà Nội",
+        location="POINT(105.806788 21.028128)",
+        kyc_status=KycStatus.APPROVED,
+    )
+    db_session.add(stranger_store)
+    await db_session.commit()
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id, OrderCreate(dish_id=dish.id, quantity=1), now=FIXED_NOW
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.cancel_order(order.id, stranger.id, now=FIXED_NOW)
+
+    assert exc_info.value.status_code == 403
+    refreshed = await dish_repo.get_by_id(db_session, dish.id)
+    assert refreshed is not None
+    assert refreshed.remaining_quantity == 2  # 3 seed − 1 đơn; không hoàn khi bị chặn
+
+
+async def test_cancel_order_409_when_past_pickup_deadline(db_session: AsyncSession) -> None:
+    """Quá hạn chót lấy món (pickup_deadline) phải bị chặn 409 và không hoàn kho."""
+    dish, consumer_id = await _seed_rescue_dish(db_session, remaining_quantity=3)
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id, OrderCreate(dish_id=dish.id, quantity=1), now=FIXED_NOW
+    )
+
+    # Deadline của đơn = 23:59 ngày 30/03 (cuối khung giờ đón món khi đặt).
+    too_late = datetime(2026, 3, 31, 8, 0)
+    with pytest.raises(HTTPException) as exc_info:
+        await service.cancel_order(order.id, consumer_id, now=too_late)
+
+    assert exc_info.value.status_code == 409
+    assert "quá hạn" in str(exc_info.value.detail)
+    refreshed = await dish_repo.get_by_id(db_session, dish.id)
+    assert refreshed is not None
+    assert refreshed.remaining_quantity == 2  # 3 seed − 1 đơn; không hoàn khi bị chặn
+
+
+async def test_cancel_order_allows_exactly_at_pickup_deadline(db_session: AsyncSession) -> None:
+    """Ranh giới: đúng thời điểm hạn chót (now == pickup_deadline) vẫn được hủy."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id, OrderCreate(dish_id=dish.id, quantity=1), now=FIXED_NOW
+    )
+
+    cancelled = await service.cancel_order(order.id, consumer_id, now=datetime(2026, 3, 30, 23, 59))
 
     assert cancelled.status == OrderStatus.CANCELLED

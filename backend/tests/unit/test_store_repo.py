@@ -162,7 +162,9 @@ def test_parse_point_wkt_supports_plain_wkt_ewkt_and_wkb() -> None:
 def test_haversine_distance_in_dimensional_meters() -> None:
     """Khoảng cách Haversine giữa 2 điểm nổi tiếng ~200m phải nằm trong biên độ hợp lý."""
     distance = store_repo.haversine_distance_meters(
-        10.776889, 106.700806,  # Tâm Nguyễn Huệ
-        10.7755, 106.7015,  # Điểm cách ~180-220m về phía nam
+        10.776889,
+        106.700806,  # Tâm Nguyễn Huệ
+        10.7755,
+        106.7015,  # Điểm cách ~180-220m về phía nam
     )
     assert 100.0 < distance < 300.0

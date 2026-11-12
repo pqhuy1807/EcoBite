@@ -96,6 +96,23 @@ async def store_partner(db_session: AsyncSession) -> dict[str, object]:
 
 
 @pytest.fixture
+async def consumer(db_session: AsyncSession) -> dict[str, object]:
+    """Persist a consumer account and provide its authenticated API headers."""
+    user = User(
+        email="consumer@ecobite.vn",
+        hashed_password="not-used-by-tests",
+        full_name="Consumer",
+        role=UserRole.CONSUMER,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    return {
+        "user": user,
+        "headers": {"Authorization": f"Bearer {create_access_token(user.id)}"},
+    }
+
+
+@pytest.fixture
 async def other_store_partner(db_session: AsyncSession) -> dict[str, object]:
     """Persist a second merchant to exercise cross-store authorization."""
     user = User(

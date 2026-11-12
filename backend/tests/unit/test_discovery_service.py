@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dish import Dish, DishStatus
 from app.models.menu_item import ItemCategory
-from app.models.store import KycStatus, Store
+from app.models.store import Store
 from app.models.user import UserRole
 from app.repositories import store_repo, user_repo
 from app.services.discovery import DiscoveryService
@@ -80,7 +80,7 @@ async def _add_dish(
 
 
 async def _prepare_geo_fixtures(db: AsyncSession) -> tuple[Store, Store, Store]:
-    """Quán GẦN (~0.2km, 1 món ACTIVE + 1 món SOLD_OUT + 1 món EXPIRED), TRUNG BÌNH (~1.5km, NOODLES), XA (~15km)."""
+    """Quán GẦN ~0.2km (ACTIVE/SOLD_OUT/EXPIRED), TRUNG BÌNH ~1.5km (NOODLES), XA ~15km."""
     near = await _create_approved_store(db, "near", latitude=10.7755, longitude=106.7015)
     mid = await _create_approved_store(db, "mid", latitude=10.7869, longitude=106.7109)
     far = await _create_approved_store(db, "far", latitude=10.8750, longitude=106.8000)
