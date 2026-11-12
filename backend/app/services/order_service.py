@@ -32,6 +32,12 @@ DISH_LOCK_KEY_TEMPLATE = "lock:dish:{dish_id}"
 # Max attempts to mint a unique `EB-YYYYMMDD-XXXXXXXX` code (order_code is UNIQUE).
 ORDER_CODE_MAX_ATTEMPTS = 3
 
+
+def _ensure_utc(value: datetime) -> datetime:
+    """Chuẩn hóa về UTC: SQLite trả datetime naive, Postgres trả tz-aware."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 # Green Points conversion rate: 1 kg CO2e saved == 10 Green Points.
 GREEN_POINTS_PER_CO2_KG = 10
 
@@ -132,32 +138,61 @@ class OrderService:
             current_time=current_time,
         )
 
-    async def cancel_order(self, order_id: uuid.UUID, user_id: uuid.UUID) -> Order:
-        """Hủy đơn: kiểm tra quyền → chuyển CANCELLED nguyên tử → hoàn suất về kho.
+    async def cancel_order(
+        self,
+        order_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        now: datetime | None = None,
+    ) -> Order:
+        """Hủy đơn: kiểm tra quyền → chặn quá hạn → chuyển CANCELLED nguyên tử → hoàn kho.
 
-        Chỉ chủ đơn (`order.consumer_id == user_id`) được hủy, và chỉ khi đơn còn
-        ở trạng thái có thể hủy (CONFIRMED / READY_FOR_PICKUP). Phần hoàn kho chạy
-        sau khi chiến thắng chuyển trạng thái nguyên tử, nên hai request hủy cùng
-        lúc tuyệt đối không hoàn kho hai lần (chống double-refund).
+        Ai được phép hủy:
+        - Chủ đơn (`order.consumer_id == user_id`), hoặc
+        - Chủ cửa hàng bán món ăn (`store.owner_id == user_id`) — đối tác có quyền
+          hủy đơn đang chờ xử lý của khách tại quán mình.
+
+        Hạn chót lấy món: khi caller truyền `now` (HTTP layer luôn truyền), đơn đã
+        quá `pickup_deadline` sẽ bị chặn 409 và không hoàn kho. Khi `now` là None
+        (mặc định, phục vụ unit test nội bộ cho tính tất định), bước kiểm tra hạn
+        chót được bỏ qua để giữ hành vi cũ.
+
+        Chỉ đơn ở trạng thái có thể hủy (CONFIRMED / READY_FOR_PICKUP) được phép
+        chuyển trạng thái. Phần hoàn kho chạy sau khi chiến thắng chuyển trạng
+        thái nguyên tử, nên hai request hủy cùng lúc tuyệt đối không hoàn kho hai
+        lần (chống double-refund).
 
         Args:
             order_id: ID đơn hàng cần hủy.
-            user_id: ID người dùng thực hiện (phải là chủ đơn).
+            user_id: ID người dùng thực hiện (chủ đơn hoặc chủ cửa hàng).
+            now: Mốc thời gian hiện tại để đối chiếu `pickup_deadline`; `None`
+                bỏ qua kiểm tra hạn chót.
 
         Returns:
             Đơn hàng đã ở trạng thái CANCELLED.
 
         Raises:
-            HTTPException: 404 không tìm thấy đơn; 403 không phải chủ đơn;
-                409 đơn đã kết thúc (COMPLETED / EXPIRED / CANCELLED).
+            HTTPException: 404 không tìm thấy đơn; 403 không phải chủ đơn/chủ quán;
+                409 đã quá hạn lấy món hoặc đơn đã kết thúc
+                (COMPLETED / EXPIRED / CANCELLED).
         """
         order = await self.orders.get_by_id(order_id)
         if order is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-        if order.consumer_id != user_id:
+
+        is_consumer_owner = order.consumer_id == user_id
+        is_store_owner = order.store.owner_id == user_id
+        if not (is_consumer_owner or is_store_owner):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Bạn không có quyền hủy đơn hàng này",
+            )
+
+        # Quá hạn chót lấy món thì không còn được hủy (đơn sẽ tự EXPIRED).
+        if now is not None and _ensure_utc(now) > _ensure_utc(order.pickup_deadline):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Đã quá hạn chót lấy món, đơn hàng không thể hủy",
             )
 
         # Chuyển trạng thái nguyên tử: chỉ một request "thắng" được phép đi tiếp.
