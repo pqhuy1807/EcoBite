@@ -81,6 +81,12 @@ class QRTokenResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrderDetailResponse(OrderResponse):
+    """Detailed order representation with its active single-use QR token when valid."""
+
+    qr_token: QRTokenResponse | None = None
+
+
 class QRVerificationRequest(BaseModel):
     """Request payload sent when a store partner scans consumer's QR code."""
 

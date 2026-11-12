@@ -44,6 +44,7 @@ from app.schemas.nlp import (
 from app.schemas.order import (
     OrderBase,
     OrderCreate,
+    OrderDetailResponse,
     OrderResponse,
     OrderUpdate,
     PaymentTransactionCreate,
@@ -103,6 +104,7 @@ __all__ = [
     "DishResponse",
     "OrderBase",
     "OrderCreate",
+    "OrderDetailResponse",
     "OrderUpdate",
     "OrderResponse",
     "QRTokenResponse",
