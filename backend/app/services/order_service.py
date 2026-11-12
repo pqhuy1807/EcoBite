@@ -18,9 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.redis import distributed_lock
 from app.models.dish import Dish, DishStatus
 from app.models.order import Order, OrderStatus
+from app.models.user import User, UserRole
 from app.repositories import dish_repo
 from app.repositories.order_repo import OrderRepository
-from app.schemas.order import OrderCreate
+from app.schemas.order import OrderCreate, OrderDetailResponse
 from app.services.dish_service import DishService
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,89 @@ class OrderService:
             # Dish bị xóa đồng thời (FK CASCADE kéo theo đơn) — đã hủy trước đó.
             logger.warning("Could not restore stock for dish %s on cancel", order.dish_id)
         return cancelled
+
+    async def get_my_orders(
+        self,
+        consumer_id: uuid.UUID,
+        *,
+        order_status: OrderStatus | None = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> list[Order]:
+        """Return paginated order history placed by `consumer_id`."""
+        return await self.orders.list_by_consumer(
+            consumer_id,
+            order_status=order_status,
+            skip=skip,
+            limit=limit,
+        )
+
+    async def get_store_orders(
+        self,
+        store_id: uuid.UUID,
+        *,
+        order_status: OrderStatus | None = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> list[Order]:
+        """Return paginated orders belonging to `store_id`."""
+        return await self.orders.list_by_store(
+            store_id,
+            order_status=order_status,
+            skip=skip,
+            limit=limit,
+        )
+
+    async def get_order_detail(
+        self,
+        order_id: uuid.UUID,
+        current_user: User,
+        *,
+        now: datetime | None = None,
+    ) -> OrderDetailResponse:
+        """Fetch an order with RBAC check and expose QR metadata only while valid.
+
+        Access rules:
+        - ADMIN: may inspect any order.
+        - CONSUMER: may inspect only their own orders.
+        - STORE_PARTNER: may inspect only orders belonging to their store.
+        """
+        order = await self.orders.get_by_id(order_id)
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+        if not self._can_view_order(order, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bạn không có quyền xem đơn hàng này",
+            )
+
+        current_time = _ensure_utc(now) if now is not None else datetime.now(UTC)
+        detail = OrderDetailResponse.model_validate(order)
+        if not self._is_valid_qr_token_for_order(order, current_time):
+            detail.qr_token = None
+        return detail
+
+    @staticmethod
+    def _can_view_order(order: Order, user: User) -> bool:
+        """Enforce Consumer, Store Partner and Admin order access permissions."""
+        if user.role == UserRole.ADMIN:
+            return True
+        if user.role == UserRole.CONSUMER:
+            return order.consumer_id == user.id
+        if user.role == UserRole.STORE_PARTNER:
+            return order.store.owner_id == user.id
+        return False
+
+    @staticmethod
+    def _is_valid_qr_token_for_order(order: Order, current_time: datetime) -> bool:
+        """Expose QR metadata only for pre-pickup orders with an unused, unexpired token."""
+        qr_token = order.qr_token
+        if qr_token is None or qr_token.is_used:
+            return False
+        if order.status not in CANCELLABLE_STATUSES:
+            return False
+        return _ensure_utc(qr_token.expires_at) >= current_time
 
     @staticmethod
     def _validate_dish_sellable(dish: Dish, now: datetime) -> None:
