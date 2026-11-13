@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, time
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -122,7 +123,8 @@ async def test_create_rescue_order_success(db_session: AsyncSession) -> None:
     # Tác động môi trường: 2 suất × 2.5 kg CO2e = 5 kg → 50 Điểm Xanh
     assert order.co2_saved_kg == Decimal("5.00")
     assert order.green_points_earned == 50
-    assert _as_utc(order.pickup_deadline) == datetime(2026, 3, 30, 23, 59, tzinfo=UTC)
+    # 23:59 giờ Việt Nam tương ứng 16:59 UTC.
+    assert _as_utc(order.pickup_deadline) == datetime(2026, 3, 30, 16, 59, tzinfo=UTC)
 
     refreshed = await dish_repo.get_by_id(db_session, dish.id)
     assert refreshed is not None
@@ -300,6 +302,38 @@ async def test_create_rescue_order_retries_when_code_collides(
     assert second.order_code == "EB-20260330-DEADBEEF"
 
 
+async def test_create_rescue_order_rolls_back_stock_when_order_insert_fails(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nếu insert đơn thất bại, số lượng tồn kho phải được rollback."""
+    dish, consumer_id = await _seed_rescue_dish(
+        db_session,
+        remaining_quantity=3,
+    )
+
+    async def fail_create_order(
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        raise RuntimeError("Simulated order insert failure")
+
+    monkeypatch.setattr(OrderRepository, "create_order", fail_create_order)
+
+    service = OrderService(db_session)
+
+    with pytest.raises(RuntimeError, match="Simulated order insert failure"):
+        await service.create_rescue_order(
+            consumer_id,
+            OrderCreate(dish_id=dish.id, quantity=2),
+            now=FIXED_NOW,
+        )
+
+    refreshed = await dish_repo.get_by_id(db_session, dish.id)
+    assert refreshed is not None
+    assert refreshed.remaining_quantity == 3
+
+
 # ==============================================================================
 # 2. cancel_order
 # ==============================================================================
@@ -322,6 +356,49 @@ async def test_cancel_order_restores_stock_and_marks_cancelled(
     refreshed = await dish_repo.get_by_id(db_session, dish.id)
     assert refreshed is not None
     assert refreshed.remaining_quantity == 4  # 1 còn lại + 3 suất hoàn về kho
+
+
+async def test_cancel_order_rolls_back_status_when_stock_restore_fails(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nếu hoàn kho thất bại, trạng thái hủy đơn cũng phải được rollback."""
+    dish, consumer_id = await _seed_rescue_dish(
+        db_session,
+        remaining_quantity=3,
+    )
+    service = OrderService(db_session)
+
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(dish_id=dish.id, quantity=2),
+        now=FIXED_NOW,
+    )
+
+    async def fail_restore_stock(
+        *_args: object,
+        **_kwargs: object,
+    ) -> Dish | None:
+        return None
+
+    monkeypatch.setattr(
+        dish_repo,
+        "atomic_increment_quantity",
+        fail_restore_stock,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.cancel_order(order.id, consumer_id)
+
+    assert exc_info.value.status_code == 409
+
+    persisted_order = await OrderRepository(db_session).get_by_id(order.id)
+    assert persisted_order is not None
+    assert persisted_order.status == OrderStatus.CONFIRMED
+
+    refreshed = await dish_repo.get_by_id(db_session, dish.id)
+    assert refreshed is not None
+    assert refreshed.remaining_quantity == 1
 
 
 async def test_cancel_order_reactivates_sold_out_dish(db_session: AsyncSession) -> None:
