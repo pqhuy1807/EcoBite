@@ -51,6 +51,7 @@ from app.schemas.order import (
     PaymentTransactionResponse,
     QRTokenResponse,
     QRVerificationRequest,
+    QRVerificationResponse,
     VNPayIPNPayload,
 )
 from app.schemas.store import (
@@ -109,6 +110,7 @@ __all__ = [
     "OrderResponse",
     "QRTokenResponse",
     "QRVerificationRequest",
+    "QRVerificationResponse",
     "PaymentTransactionCreate",
     "PaymentTransactionResponse",
     "VNPayIPNPayload",

@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.models.order import OrderStatus, PaymentMethod, PaymentStatus
 
@@ -90,8 +90,28 @@ class OrderDetailResponse(OrderResponse):
 class QRVerificationRequest(BaseModel):
     """Request payload sent when a store partner scans consumer's QR code."""
 
-    token_hash: str = Field(..., description="Mã chữ ký HMAC-SHA256 trên mã QR")
-    order_id: uuid.UUID = Field(..., description="Mã đơn hàng đối soát")
+    qr_token: str = Field(
+        ...,
+        validation_alias=AliasChoices("qr_token", "qr_payload"),
+        description="Mã QR payload (chuỗi URI ecobite://pickup?order_id=...&nonce=...&sig=...)",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class QRVerificationResponse(BaseModel):
+    """Result of QR token verification and order pickup redemption."""
+
+    success: bool = True
+    order_id: uuid.UUID
+    order_code: str
+    status: OrderStatus
+    points_awarded: int
+    co2_saved_kg: Decimal
+    message: str = "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công và cộng điểm xanh cho khách."
+    order: OrderResponse | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==============================================================================
