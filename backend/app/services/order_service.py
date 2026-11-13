@@ -21,8 +21,15 @@ from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
 from app.repositories import dish_repo
 from app.repositories.order_repo import OrderRepository
-from app.schemas.order import OrderCreate, OrderDetailResponse
+from app.repositories.qr_token_repo import QRTokenRepository
+from app.schemas.order import (
+    OrderCreate,
+    OrderDetailResponse,
+    OrderResponse,
+    QRVerificationResponse,
+)
 from app.services.dish_service import DishService
+from app.services.qr_service import QRService
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +62,7 @@ class OrderService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.orders = OrderRepository(db)
+        self.qr_tokens = QRTokenRepository(db)
 
     async def create_rescue_order(
         self,
@@ -272,6 +280,121 @@ class OrderService:
         if not self._is_valid_qr_token_for_order(order, current_time):
             detail.qr_token = None
         return detail
+
+    async def verify_and_complete_order(
+        self,
+        qr_payload: str,
+        current_user: User,
+        *,
+        now: datetime | None = None,
+    ) -> QRVerificationResponse:
+        """Xác thực mã QR nhận món và chuyển trạng thái đơn hàng sang COMPLETED (Guardrail #3).
+
+        Đảm bảo:
+        - Chỉ STORE_PARTNER sở hữu quán bán món mới được xác thực.
+        - Chữ ký HMAC-SHA256, hạn sử dụng, và thông tin payload hợp lệ.
+        - Đánh dấu token đã dùng và cập nhật Order sang COMPLETED trong cùng transaction.
+        - Rollback toàn bộ khi có lỗi, chống race condition quét trùng/quét lại.
+        """
+        current_time = _ensure_utc(now) if now is not None else datetime.now(UTC)
+        qr_service = QRService(self.db)
+
+        # 1. Parse và xác minh chữ ký HMAC-SHA256, thời hạn (Guardrail #3)
+        qr_token = await qr_service.verify_qr_token(qr_payload, now=current_time)
+
+        # 2. Lấy thông tin đơn hàng đối soát
+        order = await self.orders.get_by_id(qr_token.order_id)
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+        # 3. Kiểm tra user_id trong QR khớp với consumer_id của đơn
+        parsed = qr_service.parse_qr_payload(qr_payload)
+        if order.consumer_id != parsed.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mã QR không khớp với dữ liệu đơn hàng",
+            )
+
+        # 4. Kiểm tra quyền sở hữu cửa hàng của Store Partner
+        if current_user.role != UserRole.STORE_PARTNER or order.store.owner_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bạn không có quyền xác thực đơn hàng của cửa hàng này",
+            )
+
+        # 5. Kiểm tra trạng thái đơn hàng hợp lệ để nhận món
+        if order.status == OrderStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Đơn hàng đã được hoàn tất trước đó",
+            )
+        if order.status not in CANCELLABLE_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Đơn hàng ở trạng thái {order.status.value} không thể nhận món",
+            )
+
+        # Trích xuất ID nguyên thủy trước khối critical section để tránh MissingGreenlet
+        # khi session rollback/commit làm hết hạn (expire) các ORM model instance.
+        order_id = order.id
+        token_id = qr_token.id
+        current_status_val = order.status.value
+
+        # 6. TRANSACTION CRITICAL SECTION
+        # Distributed lock (Redis) kết hợp DB atomic conditional update
+        async with distributed_lock(
+            f"lock:order:redeem:{order_id}",
+            timeout_seconds=5,
+        ):
+            try:
+                # 6a. Atomic mark QR token as used trong cùng transaction (commit=False)
+                marked_token = await self.qr_tokens.mark_token_as_used(
+                    token_id,
+                    used_at=current_time,
+                    commit=False,
+                )
+                if marked_token is None:
+                    # Rowcount == 0 nghĩa là token đã bị dùng đồng thời bởi request khác
+                    await self.db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Mã QR đã được sử dụng trước đó!",
+                    )
+
+                # 6b. Atomic transition Order sang COMPLETED trong cùng transaction (commit=False)
+                completed_order = await self.orders.complete_if_allowed(
+                    order_id,
+                    CANCELLABLE_STATUSES,
+                    completed_at=current_time,
+                    commit=False,
+                )
+                if completed_order is None:
+                    # Trạng thái đơn bị thay đổi đồng thời (ví dụ đã bị hủy)
+                    await self.db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Đơn hàng ở trạng thái {current_status_val} không thể nhận món",
+                    )
+
+                # 6c. Commit toàn bộ transaction thành công
+                await self.db.commit()
+                await self.db.refresh(completed_order)
+            except Exception:
+                await self.db.rollback()
+                raise
+
+        return QRVerificationResponse(
+            success=True,
+            order_id=completed_order.id,
+            order_code=completed_order.order_code,
+            status=completed_order.status,
+            points_awarded=completed_order.green_points_earned,
+            co2_saved_kg=completed_order.co2_saved_kg,
+            message=(
+                "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công và cộng điểm xanh cho khách."
+            ),
+            order=OrderResponse.model_validate(completed_order),
+        )
 
     @staticmethod
     def _can_view_order(order: Order, user: User) -> bool:
