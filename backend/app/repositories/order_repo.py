@@ -1,6 +1,7 @@
 """Repository for Order persistence, lookups and status lifecycle transitions."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select, update
@@ -148,3 +149,42 @@ class OrderRepository:
             return None
         await self.db.commit()
         return await self.get_by_id(order_id)
+
+    async def complete_if_allowed(
+        self,
+        order_id: uuid.UUID,
+        allowed_statuses: tuple[OrderStatus, ...],
+        *,
+        completed_at: datetime | None = None,
+        commit: bool = True,
+    ) -> Order | None:
+        """Atomically transition order to COMPLETED, but only from `allowed_statuses`.
+
+        Executes:
+            UPDATE orders SET status = 'COMPLETED', completed_at = :completed_at
+            WHERE id = :order_id AND status IN (:allowed_statuses)
+
+        Single-winner race condition protection: returns refreshed Order if won,
+        or None if order is missing or not in allowed_statuses.
+        """
+        resolved_at = completed_at if completed_at is not None else datetime.now(UTC)
+        stmt = (
+            update(Order)
+            .where(Order.id == order_id, Order.status.in_(allowed_statuses))
+            .values(
+                status=OrderStatus.COMPLETED,
+                completed_at=resolved_at,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.db.execute(stmt)
+        if getattr(result, "rowcount", 0) == 0:
+            return None
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
+        order = await self.get_by_id(order_id)
+        if order is not None:
+            await self.db.refresh(order)
+        return order
