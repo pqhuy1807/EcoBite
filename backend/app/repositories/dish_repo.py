@@ -1,3 +1,4 @@
+
 """Repository for Surplus Dish persistence and atomic inventory control."""
 
 import uuid
@@ -65,8 +66,10 @@ async def atomic_decrement_quantity(
     db: AsyncSession,
     dish_id: uuid.UUID,
     quantity: int,
+    *,
+    commit: bool = True,
 ) -> Dish | None:
-    """Atomically decrement remaining_quantity to prevent over-selling (Guardrail #4).
+    """Atomically decrement remaining_quantity to prevent over-selling.
 
     Executes:
         UPDATE dishes
@@ -74,11 +77,15 @@ async def atomic_decrement_quantity(
         WHERE id = :dish_id AND remaining_quantity >= :quantity
 
     Returns the updated Dish if successful, or None if insufficient stock.
+
+    Set commit=False when the caller needs to combine the stock change
+    with another database operation in one transaction.
     """
     if quantity <= 0:
         return None
 
     new_rem = Dish.remaining_quantity - quantity
+
     stmt = (
         update(Dish)
         .where(
@@ -95,14 +102,20 @@ async def atomic_decrement_quantity(
         )
         .execution_options(synchronize_session=False)
     )
+
     result = await db.execute(stmt)
+
     if getattr(result, "rowcount", 0) == 0:
         return None
 
-    await db.commit()
+    if commit:
+        await db.commit()
+
     dish = await db.get(Dish, dish_id)
+
     if dish is not None:
         await db.refresh(dish)
+
     return dish
 
 
@@ -110,23 +123,29 @@ async def atomic_increment_quantity(
     db: AsyncSession,
     dish_id: uuid.UUID,
     quantity: int,
+    *,
+    commit: bool = True,
 ) -> Dish | None:
-    """Atomically restore remaining_quantity (order cancellation, Guardrail #4).
+    """Atomically restore remaining_quantity when an order is cancelled.
 
     Executes:
         UPDATE dishes
         SET remaining_quantity = remaining_quantity + :quantity
         WHERE id = :dish_id
 
-    A dish left at SOLD_OUT because it sold out is re-activated automatically;
-    other statuses (EXPIRED / INACTIVE) are preserved as-is.
+    A SOLD_OUT dish is automatically re-activated after stock restoration.
+    Other statuses (EXPIRED / INACTIVE) are preserved.
 
-    Returns the refreshed Dish, or None when the dish does not exist.
+    Returns the updated Dish, or None if the dish does not exist.
+
+    Set commit=False when the caller needs to combine stock restoration
+    with another database operation in one transaction.
     """
     if quantity <= 0:
         return None
 
     new_rem = Dish.remaining_quantity + quantity
+
     stmt = (
         update(Dish)
         .where(Dish.id == dish_id)
@@ -139,12 +158,18 @@ async def atomic_increment_quantity(
         )
         .execution_options(synchronize_session=False)
     )
+
     result = await db.execute(stmt)
+
     if getattr(result, "rowcount", 0) == 0:
         return None
 
-    await db.commit()
+    if commit:
+        await db.commit()
+
     dish = await db.get(Dish, dish_id)
+
     if dish is not None:
         await db.refresh(dish)
+
     return dish
