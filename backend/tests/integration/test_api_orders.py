@@ -1,13 +1,15 @@
 """Integration tests for rescue-order placement, RBAC and cancellation."""
 
+import asyncio
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.security import create_access_token
 from app.models.order import Order, OrderStatus, PaymentMethod, QRToken
@@ -535,3 +537,455 @@ async def test_store_orders_enforces_ownership_role_and_404(
         headers=store_partner["headers"],
     )
     assert missing_store_resp.status_code == 404
+
+
+# ==============================================================================
+# 6. POST /api/v1/orders/verify-qr — xác thực mã QR nhận món & hoàn tất đơn hàng
+# ==============================================================================
+
+
+async def test_verify_qr_success_as_store_owner(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """200: Chủ quán quét mã QR hợp lệ -> Order hoàn tất (COMPLETED), token đã dùng."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    assert created.status_code == 201
+    order_id = uuid.UUID(created.json()["id"])
+
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=db_order.id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    verify_resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=store_partner["headers"],
+    )
+    assert verify_resp.status_code == 200
+    data = verify_resp.json()
+    assert data["success"] is True
+    assert data["order_id"] == str(order_id)
+    assert data["order_code"] == db_order.order_code
+    assert data["status"] == "COMPLETED"
+
+    # Kiểm tra DB: token đã dùng, order đã COMPLETED
+    stored_token = await QRService(db_session).get_qr_token_by_order_id(order_id)
+    assert stored_token is not None
+    assert stored_token.is_used is True
+    assert stored_token.used_at is not None
+
+    refreshed_order = await db_session.get(Order, order_id)
+    assert refreshed_order is not None
+    assert refreshed_order.status == OrderStatus.COMPLETED
+    assert refreshed_order.completed_at is not None
+
+
+async def test_verify_qr_invalid_signature_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """400: Chữ ký HMAC giả mạo/không hợp lệ bị từ chối."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+    # Giả mạo signature
+    tampered_payload = re.sub(r"sig=[0-9a-f]+", "sig=0123456789abcdef" * 4, qr_payload)
+
+    resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": tampered_payload},
+        headers=store_partner["headers"],
+    )
+    assert resp.status_code == 400
+    assert "chữ ký" in resp.json()["detail"].lower()
+
+
+async def test_verify_qr_tampered_payload_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """400: Payload QR bị sửa đổi trường (nonce, order_id...) bị phát hiện."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+    # Sửa nonce trong query string
+    tampered_payload = re.sub(
+        r"nonce=[0-9a-f]+", "nonce=ffffffffffffffffffffffffffffffff", qr_payload
+    )
+
+    resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": tampered_payload},
+        headers=store_partner["headers"],
+    )
+    assert resp.status_code == 400
+
+
+async def test_verify_qr_expired_token_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """400: Token đã quá thời hạn expires_at bị từ chối."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+
+    # Tạo QR token với hạn đã qua
+    past_time = datetime.now(UTC) - timedelta(minutes=10)
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = past_time
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=past_time,
+    )
+
+    resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=store_partner["headers"],
+    )
+    assert resp.status_code == 400
+    assert "hết hạn" in resp.json()["detail"].lower()
+
+
+async def test_verify_qr_nonexistent_token_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+) -> None:
+    """404: Quét token không tồn tại trong hệ thống."""
+    fake_token = (
+        f"ecobite://pickup?order_id={uuid.uuid4()}&user_id={uuid.uuid4()}"
+        f"&nonce={'a' * 32}&expires_at=2099-01-01T00%3A00%3A00Z&sig={'b' * 64}"
+    )
+    resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": fake_token},
+        headers=store_partner["headers"],
+    )
+    assert resp.status_code in (400, 404)
+
+
+async def test_verify_qr_already_used_token_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """400: Quét mã QR đã được sử dụng trước đó (chống Replay Attack)."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    # Quét lần 1 -> 200 OK
+    resp1 = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=store_partner["headers"],
+    )
+    assert resp1.status_code == 200
+
+    # Quét lần 2 -> 400 hoặc 409
+    resp2 = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=store_partner["headers"],
+    )
+    assert resp2.status_code in (400, 409)
+    detail = resp2.json()["detail"].lower()
+    assert "đã được sử dụng" in detail or "hoàn tất" in detail
+
+
+async def test_verify_qr_wrong_user_or_order(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """400: user_id trong payload không khớp với consumer_id của đơn hàng."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    different_user_id = uuid.uuid4()
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=different_user_id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=store_partner["headers"],
+    )
+    assert resp.status_code == 400
+    assert "không khớp" in resp.json()["detail"].lower()
+
+
+async def test_verify_qr_wrong_store_partner_forbidden(
+    client: AsyncClient,
+    store_partner: dict,
+    other_store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """403: Quán khác quét mã của quán này bị từ chối."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=other_store_partner["headers"],
+    )
+    assert resp.status_code == 403
+    assert "không có quyền" in resp.json()["detail"].lower()
+
+
+async def test_verify_qr_unauthenticated_and_consumer_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """401 khi thiếu auth; 403 khi role CONSUMER gọi verify-qr."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    unauth = await client.post("/api/v1/orders/verify-qr", json={"qr_token": qr_payload})
+    assert unauth.status_code == 401
+
+    consumer_call = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=consumer["headers"],
+    )
+    assert consumer_call.status_code == 403
+
+
+async def test_verify_qr_invalid_order_status_rejected(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """409: Đơn hàng ở trạng thái CANCELLED không thể nhận món."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    # Hủy đơn trước
+    cancel_resp = await client.patch(
+        f"/api/v1/orders/{order_id}/cancel",
+        headers=consumer["headers"],
+    )
+    assert cancel_resp.status_code == 200
+
+    # Thử quét QR đơn đã hủy
+    verify_resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": qr_payload},
+        headers=store_partner["headers"],
+    )
+    assert verify_resp.status_code == 409
+    assert "không thể nhận món" in verify_resp.json()["detail"].lower()
+
+
+async def test_verify_qr_concurrent_double_redeem(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """Chống race condition: Hai request đồng thời quét 1 mã QR thì chỉ 1 request thắng."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+
+    async def concurrent_get_db():
+        async with session_factory() as s:
+            yield s
+
+    from app.db.session import get_db
+    from app.main import app
+
+    orig_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = concurrent_get_db
+
+    try:
+        task1 = client.post(
+            "/api/v1/orders/verify-qr",
+            json={"qr_token": qr_payload},
+            headers=store_partner["headers"],
+        )
+        task2 = client.post(
+            "/api/v1/orders/verify-qr",
+            json={"qr_token": qr_payload},
+            headers=store_partner["headers"],
+        )
+        resp1, resp2 = await asyncio.gather(task1, task2)
+    finally:
+        if orig_override is not None:
+            app.dependency_overrides[get_db] = orig_override
+        else:
+            app.dependency_overrides.pop(get_db, None)
+
+    statuses = {resp1.status_code, resp2.status_code}
+    assert 200 in statuses
+    assert statuses in ({200, 400}, {200, 409})
+
+    refreshed_order = await db_session.get(Order, order_id)
+    assert refreshed_order is not None
+    await db_session.refresh(refreshed_order)
+    assert refreshed_order.status == OrderStatus.COMPLETED
+
+
+async def test_verify_qr_transaction_rollback_when_order_update_fails(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transaction rollback: Nếu bước cập nhật Order thất bại, token KHÔNG được đánh dấu đã dùng."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    order_id = uuid.UUID(created.json()["id"])
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer["user"].id,
+        pickup_deadline=db_order.pickup_deadline,
+    )
+
+    # Giả lập complete_if_allowed bị lỗi bất ngờ
+    async def fake_complete_if_allowed(*args, **kwargs):
+        raise RuntimeError("Simulated failure during order completion")
+
+    from app.repositories.order_repo import OrderRepository
+
+    monkeypatch.setattr(OrderRepository, "complete_if_allowed", fake_complete_if_allowed)
+
+    try:
+        resp = await client.post(
+            "/api/v1/orders/verify-qr",
+            json={"qr_token": qr_payload},
+            headers=store_partner["headers"],
+        )
+        assert resp.status_code == 500
+    except RuntimeError:
+        pass
+
+    # Kiểm tra DB: Token KHÔNG được đánh dấu là used do transaction đã rollback
+    stored_token = await QRService(db_session).get_qr_token_by_order_id(order_id)
+    assert stored_token is not None
+    await db_session.refresh(stored_token)
+    assert stored_token.is_used is False
+
+    refreshed_order = await db_session.get(Order, order_id)
+    assert refreshed_order is not None
+    await db_session.refresh(refreshed_order)
+    assert refreshed_order.status == OrderStatus.CONFIRMED
