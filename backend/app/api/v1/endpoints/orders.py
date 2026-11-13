@@ -1,7 +1,7 @@
 """Food-rescue order endpoints: placement, history, detail lookup and cancellation."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.deps import DBSession, StoreOwner, require_roles
 from app.models.order import OrderStatus
 from app.models.user import User, UserRole
-from app.schemas.order import OrderCreate, OrderDetailResponse, OrderResponse
+from app.schemas.order import (
+    OrderCreate,
+    OrderDetailResponse,
+    OrderResponse,
+    QRVerificationRequest,
+    QRVerificationResponse,
+)
 from app.services.order_service import OrderService
 
 router = APIRouter()
@@ -37,6 +43,23 @@ async def place_rescue_order(
     """Đặt đơn giải cứu: trừ kho nguyên tử và tính tác động xanh (Guardrail #4 & #5)."""
     order = await OrderService(db).create_rescue_order(current_user.id, payload)
     return OrderResponse.model_validate(order)
+
+
+@router.post(
+    "/verify-qr",
+    status_code=status.HTTP_200_OK,
+    response_model=QRVerificationResponse,
+)
+async def verify_order_qr(
+    payload: QRVerificationRequest,
+    db: DBSession,
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.STORE_PARTNER)),
+    ],
+) -> QRVerificationResponse:
+    """Xác thực mã QR nhận món: kiểm tra chữ ký HMAC, chống quét lặp và hoàn tất đơn."""
+    return await OrderService(db).verify_and_complete_order(payload.qr_token, current_user)
 
 
 # Static /me and /store/{store_id} routes MUST stay ahead of /{order_id}
@@ -104,5 +127,5 @@ async def cancel_rescue_order(
     ],
 ) -> OrderResponse:
     """Hủy đơn trước hạn chót lấy món: hoàn kho nguyên tử, chống hoàn kép (Guardrail #4)."""
-    order = await OrderService(db).cancel_order(order_id, current_user.id, now=datetime.now())
+    order = await OrderService(db).cancel_order(order_id, current_user.id, now=datetime.now(UTC))
     return OrderResponse.model_validate(order)
