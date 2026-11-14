@@ -114,6 +114,17 @@ class QRVerificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class QRPayloadResponse(BaseModel):
+    """Canonical signed pickup QR payload for rendering and store verification."""
+
+    order_id: uuid.UUID
+    order_code: str
+    qr_payload: str
+    nonce: str
+    expires_at: datetime
+    is_used: bool
+
+
 # ==============================================================================
 # 3. Payment Transaction & VNPay IPN Schemas (Guardrail #3)
 # ==============================================================================

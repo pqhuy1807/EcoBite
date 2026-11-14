@@ -1,4 +1,3 @@
-
 """Business logic for food rescue orders: stock locking, green impact, cancellation.
 
 Complies strictly with:
@@ -27,11 +26,11 @@ from app.schemas.order import (
     OrderCreate,
     OrderDetailResponse,
     OrderResponse,
+    QRPayloadResponse,
     QRVerificationResponse,
 )
 from app.services.dish_service import DishService
 from app.services.qr_service import QRService
-
 
 logger = logging.getLogger(__name__)
 
@@ -121,53 +120,77 @@ class OrderService:
         pickup_end_time = dish.pickup_end_time
 
         # 3. Keep the distributed lock until stock and order are committed.
-        async with distributed_lock(
-            DISH_LOCK_KEY_TEMPLATE.format(dish_id=dish_id)
-        ):
-            try:
-                updated_dish = await dish_repo.atomic_decrement_quantity(
-                    self.db,
-                    dish_id,
-                    payload.quantity,
-                    commit=False,
-                )
-
-                if updated_dish is None:
-                    await self.db.rollback()
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Món ăn đã hết suất hoặc số lượng còn lại không đủ",
+        async with distributed_lock(DISH_LOCK_KEY_TEMPLATE.format(dish_id=dish_id)):
+            for attempt in range(1, ORDER_CODE_MAX_ATTEMPTS + 1):
+                updated_dish: Dish | None = None
+                try:
+                    updated_dish = await dish_repo.atomic_decrement_quantity(
+                        self.db,
+                        dish_id,
+                        payload.quantity,
+                        commit=False,
                     )
 
-                # 4. Calculate environmental impact and Green Points.
-                co2_saved_kg = (
-                    Decimal(payload.quantity) * estimated_co2_per_dish
-                ).quantize(Decimal("0.01"))
+                    if updated_dish is None:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Món ăn đã hết suất hoặc số lượng còn lại không đủ",
+                        )
 
-                green_points_earned = int(
-                    co2_saved_kg * GREEN_POINTS_PER_CO2_KG
-                )
+                    # 4. Calculate environmental impact and Green Points.
+                    co2_saved_kg = (Decimal(payload.quantity) * estimated_co2_per_dish).quantize(
+                        Decimal("0.01")
+                    )
 
-                # 5. Create the order and commit both changes together.
-                return await self._persist_order(
-                    consumer_id=consumer_id,
-                    dish_id=dish_id,
-                    store_id=store_id,
-                    pickup_end_time=pickup_end_time,
-                    payload=payload,
-                    unit_price=unit_price,
-                    co2_saved_kg=co2_saved_kg,
-                    green_points_earned=green_points_earned,
-                    current_time=current_time,
-                )
+                    green_points_earned = int(co2_saved_kg * GREEN_POINTS_PER_CO2_KG)
 
-            except HTTPException:
-                await self.db.rollback()
-                raise
-            except Exception:
-                await self.db.rollback()
-                logger.exception("Failed to create rescue order")
-                raise
+                    # 5. Create the order and commit both changes together.
+                    order = await self._persist_order(
+                        consumer_id=consumer_id,
+                        dish_id=dish_id,
+                        store_id=store_id,
+                        pickup_end_time=pickup_end_time,
+                        payload=payload,
+                        unit_price=unit_price,
+                        co2_saved_kg=co2_saved_kg,
+                        green_points_earned=green_points_earned,
+                        current_time=current_time,
+                    )
+
+                    await self.db.commit()
+                    await self.db.refresh(order)
+                    return order
+
+                except IntegrityError as exc:
+                    if updated_dish is not None:
+                        await self.db.rollback()
+                        await self.db.refresh(updated_dish)
+                    logger.warning(
+                        "Order code collision on attempt %d/%d",
+                        attempt,
+                        ORDER_CODE_MAX_ATTEMPTS,
+                    )
+                    if attempt == ORDER_CODE_MAX_ATTEMPTS:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Không sinh được mã đơn hàng duy nhất, vui lòng thử lại",
+                        ) from exc
+                except HTTPException:
+                    if updated_dish is not None:
+                        await self.db.rollback()
+                        await self.db.refresh(updated_dish)
+                    raise
+                except Exception:
+                    if updated_dish is not None:
+                        await self.db.rollback()
+                        await self.db.refresh(updated_dish)
+                    logger.exception("Failed to create rescue order")
+                    raise
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Không sinh được mã đơn hàng duy nhất, vui lòng thử lại",
+        )
 
     async def cancel_order(
         self,
@@ -199,6 +222,7 @@ class OrderService:
         # Capture values before transaction changes.
         dish_id = order.dish_id
         order_quantity = order.quantity
+        order_status_value = order.status.value
 
         # 2. Check pickup deadline when a timestamp is supplied.
         if now is not None:
@@ -212,9 +236,8 @@ class OrderService:
                 )
 
         # 3. Serialize stock restoration with order creation.
-        async with distributed_lock(
-            DISH_LOCK_KEY_TEMPLATE.format(dish_id=dish_id)
-        ):
+        async with distributed_lock(DISH_LOCK_KEY_TEMPLATE.format(dish_id=dish_id)):
+            cancelled: Order | None = None
             try:
                 # Change order status without committing.
                 cancelled = await self.orders.cancel_if_allowed(
@@ -224,13 +247,9 @@ class OrderService:
                 )
 
                 if cancelled is None:
-                    await self.db.rollback()
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            f"Đơn hàng ở trạng thái {order.status.value} "
-                            "không thể hủy"
-                        ),
+                        detail=f"Đơn hàng ở trạng thái {order_status_value} không thể hủy",
                     )
 
                 # Restore stock without committing.
@@ -250,14 +269,16 @@ class OrderService:
                 # Commit cancellation and stock restoration together.
                 await self.db.commit()
                 await self.db.refresh(cancelled)
-
                 return cancelled
-
             except HTTPException:
-                await self.db.rollback()
+                if cancelled is not None:
+                    await self.db.rollback()
+                    await self.db.refresh(order)
                 raise
             except Exception:
-                await self.db.rollback()
+                if cancelled is not None:
+                    await self.db.rollback()
+                    await self.db.refresh(order)
                 logger.exception("Failed to cancel order %s", order_id)
                 raise
 
@@ -316,11 +337,7 @@ class OrderService:
                 detail="Bạn không có quyền xem đơn hàng này",
             )
 
-        current_time = (
-            _ensure_vietnam_input_utc(now)
-            if now is not None
-            else datetime.now(UTC)
-        )
+        current_time = _ensure_vietnam_input_utc(now) if now is not None else datetime.now(UTC)
 
         detail = OrderDetailResponse.model_validate(order)
 
@@ -328,6 +345,93 @@ class OrderService:
             detail.qr_token = None
 
         return detail
+
+    async def issue_or_get_qr_payload(
+        self,
+        order_id: uuid.UUID,
+        current_user: User,
+        *,
+        now: datetime | None = None,
+    ) -> QRPayloadResponse:
+        """Issue or retrieve the canonical signed pickup QR payload for an active order."""
+        order = await self.orders.get_by_id(order_id)
+        if order is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found",
+            )
+
+        if order.consumer_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bạn không có quyền xem mã QR của đơn hàng này",
+            )
+
+        if order.status not in CANCELLABLE_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Đơn hàng ở trạng thái {order.status.value} không thể tạo mã QR",
+            )
+
+        current_time = _ensure_vietnam_input_utc(now) if now is not None else datetime.now(UTC)
+        pickup_deadline_utc = _ensure_utc(order.pickup_deadline)
+        if current_time > pickup_deadline_utc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Đã quá hạn chót lấy món, mã QR không còn hiệu lực",
+            )
+
+        qr_service = QRService(self.db)
+        existing_token = await self.qr_tokens.get_by_order_id(order.id)
+        if existing_token is not None:
+            if existing_token.is_used:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Mã QR đã được sử dụng trước đó!",
+                )
+            expires_at_utc = _ensure_utc(existing_token.expires_at)
+            if expires_at_utc < current_time:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Mã QR đã hết hạn sử dụng",
+                )
+            expires_at_raw = expires_at_utc.isoformat().replace("+00:00", "Z")
+            qr_payload = qr_service.build_qr_payload_string(
+                order_id=order.id,
+                user_id=order.consumer_id,
+                nonce=existing_token.nonce,
+                expires_at_raw=expires_at_raw,
+                signature=existing_token.token_hash,
+            )
+            return QRPayloadResponse(
+                order_id=order.id,
+                order_code=order.order_code,
+                qr_payload=qr_payload,
+                nonce=existing_token.nonce,
+                expires_at=expires_at_utc,
+                is_used=existing_token.is_used,
+            )
+
+        qr_payload = await qr_service.generate_order_qr_token(
+            order_id=order.id,
+            user_id=order.consumer_id,
+            pickup_deadline=pickup_deadline_utc,
+            commit=True,
+        )
+        created_token = await self.qr_tokens.get_by_order_id(order.id)
+        if created_token is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Không thể khởi tạo mã QR cho đơn hàng",
+            )
+        return QRPayloadResponse(
+            order_id=order.id,
+            order_code=order.order_code,
+            qr_payload=qr_payload,
+            nonce=created_token.nonce,
+            expires_at=_ensure_utc(created_token.expires_at),
+            is_used=created_token.is_used,
+        )
 
     async def verify_and_complete_order(
         self,
@@ -338,11 +442,7 @@ class OrderService:
     ) -> QRVerificationResponse:
         """Verify a pickup QR token and complete the corresponding order."""
 
-        current_time = (
-            _ensure_vietnam_input_utc(now)
-            if now is not None
-            else datetime.now(UTC)
-        )
+        current_time = _ensure_vietnam_input_utc(now) if now is not None else datetime.now(UTC)
 
         qr_service = QRService(self.db)
 
@@ -371,10 +471,7 @@ class OrderService:
             )
 
         # 4. Verify store ownership.
-        if (
-            current_user.role != UserRole.STORE_PARTNER
-            or order.store.owner_id != current_user.id
-        ):
+        if current_user.role != UserRole.STORE_PARTNER or order.store.owner_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Bạn không có quyền xác thực đơn hàng của cửa hàng này",
@@ -390,10 +487,7 @@ class OrderService:
         if order.status not in CANCELLABLE_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"Đơn hàng ở trạng thái {order.status.value} "
-                    "không thể nhận món"
-                ),
+                detail=(f"Đơn hàng ở trạng thái {order.status.value} " "không thể nhận món"),
             )
 
         order_id = order.id
@@ -428,10 +522,7 @@ class OrderService:
                 if completed_order is None:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            f"Đơn hàng ở trạng thái {current_status_value} "
-                            "không thể nhận món"
-                        ),
+                        detail=f"Đơn hàng ở trạng thái {current_status_value} không thể nhận món",
                     )
 
                 await self.db.commit()
@@ -449,8 +540,7 @@ class OrderService:
             points_awarded=completed_order.green_points_earned,
             co2_saved_kg=completed_order.co2_saved_kg,
             message=(
-                "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công "
-                "và cộng điểm xanh cho khách."
+                "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công " "và cộng điểm xanh cho khách."
             ),
             order=OrderResponse.model_validate(completed_order),
         )
@@ -500,11 +590,7 @@ class OrderService:
                 detail="Món ăn hiện không còn mở bán",
             )
 
-        if not (
-            dish.pickup_start_time
-            <= now.time()
-            <= dish.pickup_end_time
-        ):
+        if not (dish.pickup_start_time <= now.time() <= dish.pickup_end_time):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Hiện không nằm trong khung giờ đón món của quán",
@@ -523,11 +609,7 @@ class OrderService:
         green_points_earned: int,
         current_time: datetime,
     ) -> Order:
-        """Create an order and retry when its unique order code collides.
-
-        The order is inserted inside a savepoint. A duplicate order code can
-        therefore be retried without rolling back the inventory decrement.
-        """
+        """Create an order record inside the caller's active transaction."""
 
         pickup_deadline_local = datetime.combine(
             current_time.date(),
@@ -536,54 +618,21 @@ class OrderService:
 
         pickup_deadline_utc = pickup_deadline_local.astimezone(UTC)
 
-        for attempt in range(1, ORDER_CODE_MAX_ATTEMPTS + 1):
-            try:
-                async with self.db.begin_nested():
-                    order = await self.orders.create_order(
-                        {
-                            "order_code": self._generate_order_code(current_time),
-                            "consumer_id": consumer_id,
-                            "store_id": store_id,
-                            "dish_id": dish_id,
-                            "quantity": payload.quantity,
-                            "unit_price": unit_price,
-                            "total_amount": unit_price * payload.quantity,
-                            "payment_method": payload.payment_method,
-                            "co2_saved_kg": co2_saved_kg,
-                            "green_points_earned": green_points_earned,
-                            "pickup_deadline": pickup_deadline_utc,
-                        },
-                        commit=False,
-                    )
-
-                # Commit inventory decrement and order insertion together.
-                await self.db.commit()
-                await self.db.refresh(order)
-
-                return order
-
-            except IntegrityError:
-                logger.warning(
-                    "Order code collision on attempt %d/%d",
-                    attempt,
-                    ORDER_CODE_MAX_ATTEMPTS,
-                )
-
-                if attempt == ORDER_CODE_MAX_ATTEMPTS:
-                    await self.db.rollback()
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            "Không sinh được mã đơn hàng duy nhất, "
-                            "vui lòng thử lại"
-                        ),
-                    )
-
-        await self.db.rollback()
-
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Không sinh được mã đơn hàng duy nhất, vui lòng thử lại",
+        return await self.orders.create_order(
+            {
+                "order_code": self._generate_order_code(current_time),
+                "consumer_id": consumer_id,
+                "store_id": store_id,
+                "dish_id": dish_id,
+                "quantity": payload.quantity,
+                "unit_price": unit_price,
+                "total_amount": unit_price * payload.quantity,
+                "payment_method": payload.payment_method,
+                "co2_saved_kg": co2_saved_kg,
+                "green_points_earned": green_points_earned,
+                "pickup_deadline": pickup_deadline_utc,
+            },
+            commit=False,
         )
 
     @staticmethod

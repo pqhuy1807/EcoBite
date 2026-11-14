@@ -22,13 +22,16 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import time as datetime_time
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.security import create_access_token
+from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.dish import Dish, DishStatus
@@ -110,7 +113,7 @@ async def _setup_concurrency_fixture(
 
 
 @pytest.mark.asyncio
-async def test_order_placement_concurrency_benchmark(db_session: AsyncSession) -> None:
+async def test_order_placement_concurrency_benchmark(tmp_path: Path) -> None:
     """Benchmark 50 concurrent buyers competing for 2 surplus dishes.
 
     Validates:
@@ -125,17 +128,27 @@ async def test_order_placement_concurrency_benchmark(db_session: AsyncSession) -
     total_requests = 50
     initial_stock = 2
 
-    # 1. Chuẩn bị dữ liệu: 1 món ăn có tồn kho = 2, 50 consumers riêng biệt
-    dish, consumers = await _setup_concurrency_fixture(
-        db_session,
-        initial_stock=initial_stock,
-        consumer_count=total_requests,
+    db_file = tmp_path / "concurrency_benchmark.db"
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_file}",
+        poolclass=NullPool,
+        connect_args={"check_same_thread": False, "timeout": 30},
     )
-    dish_id = str(dish.id)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # 1. Chuẩn bị dữ liệu: 1 món ăn có tồn kho = 2, 50 consumers riêng biệt
+    async with session_factory() as setup_db:
+        dish, consumers = await _setup_concurrency_fixture(
+            setup_db,
+            initial_stock=initial_stock,
+            consumer_count=total_requests,
+        )
+        dish_id = str(dish.id)
 
     # 2. Cấu hình session độc lập cho từng request (mô phỏng đúng môi trường production)
-    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
-
     async def _concurrent_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
             yield session
@@ -188,13 +201,16 @@ async def test_order_placement_concurrency_benchmark(db_session: AsyncSession) -
     p95_latency_ms = latencies_sorted[int(len(latencies_sorted) * 0.95)]
 
     # 5. Kiểm tra tính toàn vẹn dữ liệu trong Database (Audit)
-    async with session_factory() as audit_db:
-        final_dish = await audit_db.get(Dish, dish.id)
-        assert final_dish is not None
+    try:
+        async with session_factory() as audit_db:
+            final_dish = await audit_db.get(Dish, dish.id)
+            assert final_dish is not None
 
-        orders_in_db = (
-            await audit_db.execute(select(func.count(Order.id)).where(Order.dish_id == dish.id))
-        ).scalar_one()
+            orders_in_db = (
+                await audit_db.execute(select(func.count(Order.id)).where(Order.dish_id == dish.id))
+            ).scalar_one()
+    finally:
+        await engine.dispose()
 
     # In kết quả benchmark ra console để quan sát trực tiếp
     print("\n" + "=" * 70)
@@ -219,18 +235,18 @@ async def test_order_placement_concurrency_benchmark(db_session: AsyncSession) -
 
     # 6. Assertions theo đúng yêu cầu đề bài
     assert other_codes == [], f"Unexpected status codes: {other_codes}"
-    assert success_count == initial_stock, (
-        f"Expected exactly {initial_stock} successful orders, got {success_count}"
-    )
-    assert conflict_count == (total_requests - initial_stock), (
-        f"Expected exactly {total_requests - initial_stock} 409 conflicts, got {conflict_count}"
-    )
-    assert final_dish.remaining_quantity == 0, (
-        f"Remaining quantity must be 0, got {final_dish.remaining_quantity}"
-    )
-    assert final_dish.status == DishStatus.SOLD_OUT, (
-        f"Dish status must be SOLD_OUT, got {final_dish.status}"
-    )
-    assert orders_in_db == initial_stock, (
-        f"Orders in database must be exactly {initial_stock}, got {orders_in_db}"
-    )
+    assert (
+        success_count == initial_stock
+    ), f"Expected exactly {initial_stock} successful orders, got {success_count}"
+    assert conflict_count == (
+        total_requests - initial_stock
+    ), f"Expected exactly {total_requests - initial_stock} 409 conflicts, got {conflict_count}"
+    assert (
+        final_dish.remaining_quantity == 0
+    ), f"Remaining quantity must be 0, got {final_dish.remaining_quantity}"
+    assert (
+        final_dish.status == DishStatus.SOLD_OUT
+    ), f"Dish status must be SOLD_OUT, got {final_dish.status}"
+    assert (
+        orders_in_db == initial_stock
+    ), f"Orders in database must be exactly {initial_stock}, got {orders_in_db}"

@@ -180,10 +180,10 @@ pre-commit run --all-files
 
 ---
 
-## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-11)
+## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-14)
 
-- **Backend**: đã có auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes + `DiscoveryService` (PostGIS), seed 12 bảng và 1 migration Alembic. **Mới (2026-11-11)**: `OrderService` tại `app/services/order_service.py` — `create_rescue_order` (check ACTIVE + khung giờ đón món → Redis lock `lock:dish:{dish_id}` → `dish_repo.atomic_decrement_quantity` → co2/green-points → mã `EB-YYYYMMDD-XXXXXXXX` có retry) và `cancel_order` (hủy nguyên tử 1-winner qua `OrderRepository.cancel_if_allowed` + hoàn kho qua `dish_repo.atomic_increment_quantity`); kèm Redis helper `app/core/redis.py` + biến env `REDIS_URL`/`REDIS_LOCK_TIMEOUT_SECONDS`/`REDIS_SOCKET_TIMEOUT_SECONDS` (đã cập nhật `backend/.env.example`). **Mới (2026-11-12)**: Order Router `app/api/v1/endpoints/orders.py` (prefix `/orders`, tags `Orders`): `POST /api/v1/orders` (chỉ `CONSUMER`, 201 Created) và `PATCH /api/v1/orders/{order_id}/cancel` (`CONSUMER` chủ đơn **hoặc** `STORE_PARTNER` chủ quán bán món — `cancel_order` check `order.store.owner_id`; chặn hủy sau `pickup_deadline` qua kwarg `now`, HTTP layer luôn truyền `datetime.now()`, `now=None` bỏ qua check để giữ unit test cũ); tests tại `tests/unit/test_order_service.py` + `tests/integration/test_api_orders.py`. Vẫn **chưa có**: QR confirm API, VNPay webhook, `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
-- **Frontend**: giai đoạn skeleton — `components`, `services`, `types`, `providers` đã có; **chưa có** `src/app` (App Router), **chưa có** `src/lib/api-client.ts`, **chưa cấu hình** test runner (mục 1, Bước 2).
+- **Backend**: đã có đầy đủ auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes/orders (`POST /orders`, `GET /orders/me`, `GET /orders/store/{store_id}`, `GET /orders/{order_id}`, `POST /orders/{order_id}/qr`, `POST /orders/verify-qr`, `PATCH /orders/{order_id}/cancel`) + `DiscoveryService`, `OrderService`, `QRService` (HMAC-SHA256 + anti-replay). Vẫn **chưa có**: VNPay webhook, `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
+- **Frontend**: đã triển khai đầy đủ luồng SDD `001-rescue-discovery-order-qr` (`src/lib/api-client.ts`, `src/lib/utils.ts`, `src/app/` với `/`, `/login`, `/register`, `/orders`, `/store/verify-qr`, `/store/onboard`, `RadarMap.tsx` tích hợp Leaflet). **Chưa cấu hình** test runner frontend (mục 1, Bước 2).
 - Bất kỳ thay đổi nào làm lệch cấu trúc/lệnh trong file này (đổi venv, đổi tên tầng, thêm công cụ validation) phải **cập nhật lại `AGENTS.md`** ngay trong cùng commit.
 
 ---

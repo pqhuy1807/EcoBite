@@ -1,4 +1,3 @@
-
 """Repository for Order persistence, lookups and status lifecycle transitions."""
 
 import uuid
@@ -112,20 +111,14 @@ class OrderRepository:
         if order_status is not None:
             stmt = stmt.where(Order.status == order_status)
 
-        stmt = (
-            stmt.order_by(Order.created_at.desc(), Order.id.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        stmt = stmt.order_by(Order.created_at.desc(), Order.id.desc()).offset(skip).limit(limit)
 
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def get_by_order_code(self, code: str) -> Order | None:
         """Retrieve an order by its display code."""
-        result = await self.db.execute(
-            select(Order).where(Order.order_code == code)
-        )
+        result = await self.db.execute(select(Order).where(Order.order_code == code))
         return result.scalar_one_or_none()
 
     async def update_status(
@@ -208,11 +201,7 @@ class OrderRepository:
 
         Returns None when the order is missing or cannot be completed.
         """
-        resolved_at = (
-            completed_at
-            if completed_at is not None
-            else datetime.now(UTC)
-        )
+        resolved_at = completed_at if completed_at is not None else datetime.now(UTC)
 
         stmt = (
             update(Order)

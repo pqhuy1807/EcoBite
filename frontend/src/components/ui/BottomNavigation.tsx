@@ -1,20 +1,50 @@
 // frontend/src/components/ui/BottomNavigation.tsx
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Compass, Store, User } from 'lucide-react';
+import { Compass, QrCode, ShoppingBag, Store, User as UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { User } from '@/types/api';
+
+function readStoredUser(): User | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem('user');
+        return raw ? (JSON.parse(raw) as User) : null;
+    } catch {
+        return null;
+    }
+}
 
 export function BottomNavigation() {
     const pathname = usePathname();
+    const [user, setUser] = useState<User | null>(null);
 
-    const navItems = [
-        { href: '/', label: 'Khám phá', icon: Compass },
-        { href: '/store/onboard', label: 'Đối tác KYC', icon: Store },
-        { href: '/login', label: 'Tài khoản', icon: User },
-    ];
+    useEffect(() => {
+        const syncUser = () => setUser(readStoredUser());
+        syncUser();
+        window.addEventListener('ecobite-auth-change', syncUser);
+        window.addEventListener('storage', syncUser);
+        return () => {
+            window.removeEventListener('ecobite-auth-change', syncUser);
+            window.removeEventListener('storage', syncUser);
+        };
+    }, []);
+
+    const navItems =
+        user?.role === 'STORE_PARTNER'
+            ? [
+                  { href: '/', label: 'Khám phá', icon: Compass },
+                  { href: '/store/verify-qr', label: 'Quét QR', icon: QrCode },
+                  { href: '/store/onboard', label: 'Đối tác KYC', icon: Store },
+              ]
+            : [
+                  { href: '/', label: 'Khám phá', icon: Compass },
+                  { href: '/orders', label: 'Đơn của tôi', icon: ShoppingBag },
+                  { href: '/login', label: user ? user.full_name.split(' ').slice(-1)[0] : 'Tài khoản', icon: UserIcon },
+              ];
 
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white md:hidden">
@@ -34,7 +64,7 @@ export function BottomNavigation() {
                             )}
                         >
                             <Icon className="h-5 w-5" />
-                            <span>{item.label}</span>
+                            <span className="max-w-[80px] truncate">{item.label}</span>
                         </Link>
                     );
                 })}
