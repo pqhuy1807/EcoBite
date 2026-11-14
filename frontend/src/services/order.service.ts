@@ -1,34 +1,67 @@
 import { apiClient } from '@/lib/api-client';
+import {
+    CreateOrderPayload,
+    OrderDetailResponse,
+    OrderResponse,
+    OrderStatus,
+    QRPayloadResponse,
+    QRVerificationResponse,
+} from '@/types/api';
 
-export interface CreateOrderPayload {
-    dish_id: string;
-    quantity: number;
-}
-
-export interface OrderResponse {
-    id: string;
-    order_code: string; // VD: EB-20261109-XXXX
-    status: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
-    quantity: number;
-    total_price: number;
-    co2_saved_kg: number;
-    green_points: number;
-    pickup_deadline: string;
-}
+export type {
+    CreateOrderPayload,
+    OrderDetailResponse,
+    OrderResponse,
+    OrderStatus,
+    QRPayloadResponse,
+    QRVerificationResponse,
+};
 
 export const orderService = {
-    async createRescueOrder(payload: CreateOrderPayload): Promise<OrderResponse> {
-        const { data } = await apiClient.post<OrderResponse>('/orders', payload);
+    async createRescueOrder(
+        payload: CreateOrderPayload
+    ): Promise<OrderResponse> {
+        const { data } = await apiClient.post<OrderResponse>('/orders', {
+            dish_id: payload.dish_id,
+            quantity: payload.quantity,
+            payment_method: payload.payment_method ?? 'COD',
+        });
         return data;
     },
 
     async cancelOrder(orderId: string): Promise<OrderResponse> {
-        const { data } = await apiClient.patch<OrderResponse>(`/orders/${orderId}/cancel`);
+        const { data } = await apiClient.patch<OrderResponse>(
+            `/orders/${orderId}/cancel`
+        );
         return data;
     },
 
-    async getMyOrders(): Promise<OrderResponse[]> {
-        const { data } = await apiClient.get<OrderResponse[]>('/orders/me');
+    async getMyOrders(status?: OrderStatus): Promise<OrderResponse[]> {
+        const { data } = await apiClient.get<OrderResponse[]>('/orders/me', {
+            params: status ? { status } : undefined,
+        });
+        return data;
+    },
+
+    async getOrderDetail(orderId: string): Promise<OrderDetailResponse> {
+        const { data } = await apiClient.get<OrderDetailResponse>(
+            `/orders/${orderId}`
+        );
+        return data;
+    },
+
+    async issueOrderQr(orderId: string): Promise<QRPayloadResponse> {
+        const { data } = await apiClient.post<QRPayloadResponse>(
+            `/orders/${orderId}/qr`
+        );
+        return data;
+    },
+
+    async verifyOrderQr(qrToken: string): Promise<QRVerificationResponse> {
+        const { data } = await apiClient.post<QRVerificationResponse>(
+            '/orders/verify-qr',
+            { qr_token: qrToken }
+        );
         return data;
     },
 };

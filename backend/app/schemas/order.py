@@ -45,6 +45,10 @@ class OrderResponse(OrderBase):
     order_code: str
     consumer_id: uuid.UUID
     store_id: uuid.UUID
+    store_name: str | None = None
+    store_address: str | None = None
+    dish_name: str | None = None
+    dish_image_url: str | None = None
     unit_price: Decimal
     total_amount: Decimal
     status: OrderStatus
@@ -112,6 +116,17 @@ class QRVerificationResponse(BaseModel):
     order: OrderResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class QRPayloadResponse(BaseModel):
+    """Canonical signed pickup QR payload for rendering and store verification."""
+
+    order_id: uuid.UUID
+    order_code: str
+    qr_payload: str
+    nonce: str
+    expires_at: datetime
+    is_used: bool
 
 
 # ==============================================================================

@@ -268,4 +268,3 @@ class QRService:
             )
 
         return qr_token
-

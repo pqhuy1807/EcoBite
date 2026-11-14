@@ -989,3 +989,94 @@ async def test_verify_qr_transaction_rollback_when_order_update_fails(
     assert refreshed_order is not None
     await db_session.refresh(refreshed_order)
     assert refreshed_order.status == OrderStatus.CONFIRMED
+
+
+# ==============================================================================
+# 7. POST /api/v1/orders/{order_id}/qr — cấp/lấy lại QR payload ký HMAC
+# ==============================================================================
+
+
+async def test_issue_order_qr_payload_is_idempotent_and_verifiable(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """200: Consumer lấy QR payload cho đơn CONFIRMED; gọi lại trả cùng payload & verify OK."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    assert created.status_code == 201
+    order_id = uuid.UUID(created.json()["id"])
+
+    db_order = await db_session.get(Order, order_id)
+    assert db_order is not None
+    db_order.pickup_deadline = datetime.now(UTC) + timedelta(hours=2)
+    await db_session.commit()
+
+    first_qr = await client.post(f"/api/v1/orders/{order_id}/qr", headers=consumer["headers"])
+    assert first_qr.status_code == 200
+    body1 = first_qr.json()
+    assert body1["order_id"] == str(order_id)
+    assert body1["qr_payload"].startswith("ecobite://pickup?")
+    assert body1["is_used"] is False
+
+    second_qr = await client.post(f"/api/v1/orders/{order_id}/qr", headers=consumer["headers"])
+    assert second_qr.status_code == 200
+    assert second_qr.json()["qr_payload"] == body1["qr_payload"]
+
+    verify_resp = await client.post(
+        "/api/v1/orders/verify-qr",
+        json={"qr_token": body1["qr_payload"]},
+        headers=store_partner["headers"],
+    )
+    assert verify_resp.status_code == 200
+    assert verify_resp.json()["status"] == "COMPLETED"
+
+
+async def test_issue_order_qr_payload_blocks_non_owner_and_cancelled_order(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+    db_session: AsyncSession,
+) -> None:
+    """403 nếu không phải consumer chủ đơn; 409 nếu đơn đã hủy."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    assert created.status_code == 201
+    order_id = uuid.UUID(created.json()["id"])
+
+    forbidden = await client.post(f"/api/v1/orders/{order_id}/qr", headers=store_partner["headers"])
+    assert forbidden.status_code == 403
+
+    cancel_resp = await client.patch(
+        f"/api/v1/orders/{order_id}/cancel", headers=consumer["headers"]
+    )
+    assert cancel_resp.status_code == 200
+
+    conflict = await client.post(f"/api/v1/orders/{order_id}/qr", headers=consumer["headers"])
+    assert conflict.status_code == 409
+
+
+async def test_order_responses_include_store_and_dish_display_fields(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+) -> None:
+    """OrderResponse trả về tên quán, địa chỉ quán và tên món ăn cho UI Đơn của tôi."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["store_name"] == store_partner["store"].name
+    assert created_body["store_address"] == store_partner["store"].address
+    assert created_body["dish_name"] == "Banh mi trung"
+    assert created_body["dish_image_url"] == "https://cdn.ecobite.vn/banh-mi-trung.jpg"
+
+    my_orders = await client.get("/api/v1/orders/me", headers=consumer["headers"])
+    assert my_orders.status_code == 200
+    items = my_orders.json()
+    assert len(items) == 1
+    assert items[0]["store_name"] == store_partner["store"].name
+    assert items[0]["store_address"] == store_partner["store"].address
+    assert items[0]["dish_name"] == "Banh mi trung"
+    assert items[0]["dish_image_url"] == "https://cdn.ecobite.vn/banh-mi-trung.jpg"

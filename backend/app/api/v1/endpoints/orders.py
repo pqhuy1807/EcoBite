@@ -13,6 +13,7 @@ from app.schemas.order import (
     OrderCreate,
     OrderDetailResponse,
     OrderResponse,
+    QRPayloadResponse,
     QRVerificationRequest,
     QRVerificationResponse,
 )
@@ -115,6 +116,19 @@ async def get_order_detail(
 ) -> OrderDetailResponse:
     """Xem chi tiết một đơn hàng và thông tin QR hợp lệ (kiểm tra quyền sở hữu/admin)."""
     return await OrderService(db).get_order_detail(order_id, current_user)
+
+
+@router.post("/{order_id}/qr", response_model=QRPayloadResponse)
+async def issue_order_qr_payload(
+    order_id: uuid.UUID,
+    db: DBSession,
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.CONSUMER)),
+    ],
+) -> QRPayloadResponse:
+    """Khởi tạo hoặc lấy lại mã QR ký HMAC-SHA256 hợp lệ cho đơn hàng của khách."""
+    return await OrderService(db).issue_or_get_qr_payload(order_id, current_user)
 
 
 @router.patch("/{order_id}/cancel", response_model=OrderResponse)
