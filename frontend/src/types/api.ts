@@ -118,7 +118,11 @@ export interface OrderResponse {
     order_code: string;
     consumer_id: string;
     store_id: string;
+    store_name?: string | null;
+    store_address?: string | null;
     dish_id: string;
+    dish_name?: string | null;
+    dish_image_url?: string | null;
     quantity: number;
     unit_price: string | number;
     total_amount: string | number;

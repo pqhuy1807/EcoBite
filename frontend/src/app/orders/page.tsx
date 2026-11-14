@@ -8,9 +8,11 @@ import {
     Clock,
     Copy,
     Leaf,
+    MapPin,
     QrCode,
     RefreshCw,
     ShoppingBag,
+    Store,
     XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -226,14 +228,30 @@ export default function MyOrdersPage() {
                             <Card key={order.id} className="p-5">
                                 <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                                     <div className="space-y-2">
-                                        <div className="flex flex-wrap items-center gap-2.5">
-                                            <span className="font-mono text-base font-bold text-gray-900">
-                                                {order.order_code}
-                                            </span>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h2 className="text-base font-bold text-gray-900">
+                                                {order.dish_name ?? 'Suất ăn giải cứu'}
+                                            </h2>
                                             <Badge variant={badge.variant}>{badge.label}</Badge>
                                             <Badge variant="neutral">
                                                 {order.payment_method} • {order.payment_status}
                                             </Badge>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                            <span className="inline-flex items-center gap-1 font-medium text-gray-800">
+                                                <Store className="h-3.5 w-3.5 text-emerald-600" />
+                                                {order.store_name ?? 'Cửa hàng đối tác'}
+                                            </span>
+                                            {order.store_address && (
+                                                <span className="inline-flex items-center gap-1 text-gray-500">
+                                                    <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                                                    {order.store_address}
+                                                </span>
+                                            )}
+                                            <span className="rounded bg-gray-100 px-2 py-0.5 font-mono text-[11px] font-medium text-gray-600">
+                                                Mã đơn: {order.order_code}
+                                            </span>
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
@@ -316,10 +334,18 @@ export default function MyOrdersPage() {
                                     </span>
                                 </p>
                                 {qrOrder && (
-                                    <p>
-                                        Giá trị đơn: {formatVND(qrOrder.total_amount)} •{' '}
-                                        {qrOrder.quantity} suất
-                                    </p>
+                                    <div className="space-y-0.5">
+                                        {qrOrder.dish_name && (
+                                            <p className="font-semibold text-gray-900">
+                                                {qrOrder.dish_name}
+                                                {qrOrder.store_name ? ` • ${qrOrder.store_name}` : ''}
+                                            </p>
+                                        )}
+                                        <p>
+                                            Giá trị đơn: {formatVND(qrOrder.total_amount)} •{' '}
+                                            {qrOrder.quantity} suất
+                                        </p>
+                                    </div>
                                 )}
                                 <p className="text-emerald-700">
                                     Mã dùng 1 lần (HMAC-SHA256 chống quét lại).

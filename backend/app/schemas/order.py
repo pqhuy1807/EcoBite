@@ -45,6 +45,10 @@ class OrderResponse(OrderBase):
     order_code: str
     consumer_id: uuid.UUID
     store_id: uuid.UUID
+    store_name: str | None = None
+    store_address: str | None = None
+    dish_name: str | None = None
+    dish_image_url: str | None = None
     unit_price: Decimal
     total_amount: Decimal
     status: OrderStatus

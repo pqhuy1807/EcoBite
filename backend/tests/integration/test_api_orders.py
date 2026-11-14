@@ -1055,3 +1055,28 @@ async def test_issue_order_qr_payload_blocks_non_owner_and_cancelled_order(
 
     conflict = await client.post(f"/api/v1/orders/{order_id}/qr", headers=consumer["headers"])
     assert conflict.status_code == 409
+
+
+async def test_order_responses_include_store_and_dish_display_fields(
+    client: AsyncClient,
+    store_partner: dict,
+    consumer: dict,
+) -> None:
+    """OrderResponse trả về tên quán, địa chỉ quán và tên món ăn cho UI Đơn của tôi."""
+    dish_id = await _create_rescue_dish(client, store_partner)
+    created = await _place_order(client, consumer["headers"], dish_id, quantity=1)
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["store_name"] == store_partner["store"].name
+    assert created_body["store_address"] == store_partner["store"].address
+    assert created_body["dish_name"] == "Banh mi trung"
+    assert created_body["dish_image_url"] == "https://cdn.ecobite.vn/banh-mi-trung.jpg"
+
+    my_orders = await client.get("/api/v1/orders/me", headers=consumer["headers"])
+    assert my_orders.status_code == 200
+    items = my_orders.json()
+    assert len(items) == 1
+    assert items[0]["store_name"] == store_partner["store"].name
+    assert items[0]["store_address"] == store_partner["store"].address
+    assert items[0]["dish_name"] == "Banh mi trung"
+    assert items[0]["dish_image_url"] == "https://cdn.ecobite.vn/banh-mi-trung.jpg"

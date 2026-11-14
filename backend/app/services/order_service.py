@@ -159,7 +159,8 @@ class OrderService:
 
                     await self.db.commit()
                     await self.db.refresh(order)
-                    return order
+                    loaded_order = await self.orders.get_by_id(order.id)
+                    return loaded_order or order
 
                 except IntegrityError as exc:
                     if updated_dish is not None:
@@ -269,7 +270,8 @@ class OrderService:
                 # Commit cancellation and stock restoration together.
                 await self.db.commit()
                 await self.db.refresh(cancelled)
-                return cancelled
+                loaded_order = await self.orders.get_by_id(order_id)
+                return loaded_order or cancelled
             except HTTPException:
                 if cancelled is not None:
                     await self.db.rollback()

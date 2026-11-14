@@ -106,7 +106,14 @@ class OrderRepository:
         limit: int = 20,
     ) -> list[Order]:
         """Execute shared paginated and status-filtered order history query."""
-        stmt = select(Order).where(scope_filter)
+        stmt = (
+            select(Order)
+            .where(scope_filter)
+            .options(
+                selectinload(Order.store),
+                selectinload(Order.dish),
+            )
+        )
 
         if order_status is not None:
             stmt = stmt.where(Order.status == order_status)

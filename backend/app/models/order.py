@@ -18,6 +18,9 @@ from sqlalchemy import (
     Uuid,
     func,
 )
+from sqlalchemy import (
+    inspect as sa_inspect,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -227,6 +230,36 @@ class Order(Base):
         CheckConstraint("quantity > 0", name="ck_orders_quantity_positive"),
         CheckConstraint("total_amount >= 0", name="ck_orders_total_amount_non_negative"),
     )
+
+    def _is_relation_loaded(self, attr_name: str) -> bool:
+        try:
+            return attr_name not in sa_inspect(self).unloaded
+        except Exception:
+            return True
+
+    @property
+    def store_name(self) -> str | None:
+        if not self._is_relation_loaded("store"):
+            return None
+        return self.store.name if self.store is not None else None
+
+    @property
+    def store_address(self) -> str | None:
+        if not self._is_relation_loaded("store"):
+            return None
+        return self.store.address if self.store is not None else None
+
+    @property
+    def dish_name(self) -> str | None:
+        if not self._is_relation_loaded("dish"):
+            return None
+        return self.dish.name if self.dish is not None else None
+
+    @property
+    def dish_image_url(self) -> str | None:
+        if not self._is_relation_loaded("dish"):
+            return None
+        return self.dish.image_url if self.dish is not None else None
 
 
 class QRToken(Base):
