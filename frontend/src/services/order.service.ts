@@ -8,6 +8,15 @@ import {
     QRVerificationResponse,
 } from '@/types/api';
 
+export type {
+    CreateOrderPayload,
+    OrderDetailResponse,
+    OrderResponse,
+    OrderStatus,
+    QRPayloadResponse,
+    QRVerificationResponse,
+};
+
 export const orderService = {
     async createRescueOrder(
         payload: CreateOrderPayload
