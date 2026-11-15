@@ -9,7 +9,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -34,7 +34,11 @@ from app.services.qr_service import QRService
 
 logger = logging.getLogger(__name__)
 
-VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+try:
+    VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+except ZoneInfoNotFoundError:
+    from datetime import timedelta, timezone
+    VIETNAM_TZ = timezone(timedelta(hours=7))
 
 DISH_LOCK_KEY_TEMPLATE = "lock:dish:{dish_id}"
 
