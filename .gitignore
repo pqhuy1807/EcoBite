@@ -164,3 +164,9 @@ Thumbs.db
 *~
 *.swp
 *.swo
+
+# Kiro IDE specs and state
+.kiro/
+
+# Kiro IDE specs and state
+.kiro/

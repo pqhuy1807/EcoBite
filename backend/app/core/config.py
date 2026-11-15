@@ -7,7 +7,7 @@ hard-coded into the source tree (AGENTS.md guardrail #1).
 
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +64,16 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        """Enforce secure SECRET_KEY in production environments."""
+        if self.APP_ENV == "production" and "CHANGE_ME" in self.SECRET_KEY:
+            raise ValueError(
+                "SECRET_KEY must be changed in production. "
+                "Generate a secure key with: openssl rand -hex 32"
+            )
+        return self
 
     @property
     def qr_signing_key(self) -> str:
