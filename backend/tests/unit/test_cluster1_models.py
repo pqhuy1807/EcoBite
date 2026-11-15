@@ -19,22 +19,17 @@ from app.schemas.user_preference import UserPreferenceCreate, UserPreferenceResp
 
 
 def test_user_schema_role_normalization() -> None:
-    """Test that role accepts both uppercase and lowercase strings."""
-    user_upper = UserCreate(
-        email="test@ecobite.vn",
-        password="ValidPassword123!",
-        full_name="Nguyen Van A",
-        role="CONSUMER",  # type: ignore[arg-type]
-    )
-    assert user_upper.role == UserRole.CONSUMER
-
-    user_lower = UserCreate(
-        email="test2@ecobite.vn",
-        password="ValidPassword123!",
-        full_name="Nguyen Van B",
-        role="consumer",  # type: ignore[arg-type]
-    )
-    assert user_lower.role == UserRole.CONSUMER
+    """Test that UserCreate rejects role field (privilege escalation prevention)."""
+    # With extra='forbid', role field should be rejected
+    with pytest.raises(ValidationError) as exc_info:
+        UserCreate(
+            email="test@ecobite.vn",
+            password="ValidPassword123!",
+            full_name="Nguyen Van A",
+            role="CONSUMER",
+        )
+    assert "role" in str(exc_info.value)
+    assert "extra" in str(exc_info.value).lower()
 
 
 def test_user_schema_invalid_email_and_password() -> None:

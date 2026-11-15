@@ -8,7 +8,6 @@ USER_PAYLOAD: dict[str, str] = {
     "email": "consumer@ecobite.vn",
     "password": "S3curePass!2024",
     "full_name": "Nguyen Van A",
-    "role": "consumer",
 }
 
 FORM_CREDENTIALS: dict[str, str] = {

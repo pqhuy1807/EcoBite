@@ -137,3 +137,19 @@ async def other_store_partner(db_session: AsyncSession) -> dict[str, object]:
         "store": store,
         "headers": {"Authorization": f"Bearer {create_access_token(user.id)}"},
     }
+
+
+@pytest.fixture
+async def active_user(db_session: AsyncSession) -> User:
+    """Persist an active user account for bug exploration tests."""
+    user = User(
+        email="active@ecobite.vn",
+        hashed_password="not-used-by-tests",
+        full_name="Active User",
+        role=UserRole.CONSUMER,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
