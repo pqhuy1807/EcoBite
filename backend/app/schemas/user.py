@@ -23,10 +23,15 @@ class UserBase(BaseModel):
         return value
 
 
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
     """Registration payload; passwords are plain here and hashed by the service layer."""
 
+    email: EmailStr
+    full_name: str
+    phone: str | None = None
     password: str = Field(min_length=8, max_length=128)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class UserUpdate(BaseModel):

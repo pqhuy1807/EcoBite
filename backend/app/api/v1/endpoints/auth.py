@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.api.deps import DBSession
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.token import RefreshTokenRequest, Token
 from app.schemas.user import UserCreate, UserResponse
 from app.services import auth as auth_service
@@ -19,7 +19,7 @@ router = APIRouter()
     summary="Register a new account",
 )
 async def register(user_in: UserCreate, db: DBSession) -> User:
-    """Create a consumer/store-partner account; duplicate emails return 409."""
+    """Create a consumer account; duplicate emails return 409."""
     if await user_service.get_user_by_email(db, user_in.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
