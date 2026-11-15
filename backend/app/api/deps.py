@@ -38,8 +38,11 @@ async def get_current_user(
     try:
         payload = security.decode_access_token(token)
         raw_subject = payload.get("sub")
+        token_type = payload.get("type")
     except JWTError:
         raise credentials_exception from None
+    if token_type != "access":
+        raise credentials_exception
     if raw_subject is None:
         raise credentials_exception
     try:
@@ -50,6 +53,11 @@ async def get_current_user(
     user = await user_service.get_user_by_id(db, user_id)
     if user is None:
         raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
+        )
     return user
 
 
