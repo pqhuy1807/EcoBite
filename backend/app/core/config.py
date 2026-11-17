@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     QR_SIGNATURE_SECRET: str | None = None
     QR_TOKEN_VALIDITY_MINUTES: int = 60
 
+    # --- VNPay Payment Gateway Configuration ---------------------------------
+    VNP_TMN_CODE: str = ""
+    VNP_HASH_SECRET: str = ""
+    VNP_URL: str = ""
+    VNP_RETURN_URL: str = ""
+
     # --- Database (async driver used by the app) ------------------------------
     # Postgres  : postgresql+asyncpg://user:pass@host:5432/db
     # Local dev : sqlite+aiosqlite:///./ecobite.db
