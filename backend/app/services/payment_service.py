@@ -8,9 +8,8 @@ Complies strictly with:
 import hashlib
 import hmac
 import logging
-import uuid
 import urllib.parse
-from collections.abc import Callable
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -22,7 +21,6 @@ from app.core.config import settings
 from app.core.redis import distributed_lock
 from app.models.order import Order, OrderStatus, PaymentMethod, PaymentStatus
 from app.repositories import dish_repo, order_repo, payment_repo
-from app.services import user as user_service
 
 logger = logging.getLogger(__name__)
 

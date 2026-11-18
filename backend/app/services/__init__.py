@@ -6,8 +6,8 @@ decoupling HTTP endpoints in `app.api` from persistence in `app.repositories`.
 
 from app.services import (
     auth,
-    dish_service,
     discovery,
+    dish_service,
     order_service,
     payment_service,
     qr_service,

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.api.deps import DBSession
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.token import RefreshTokenRequest, Token
 from app.schemas.user import UserCreate, UserResponse
 from app.services import auth as auth_service

@@ -89,7 +89,7 @@ class PaymentTransactionRepository:
             select(PaymentTransaction)
             .where(
                 PaymentTransaction.txn_ref == txn_ref,
-                PaymentTransaction.is_verified == True,
+                PaymentTransaction.is_verified.is_(True),
             )
             .options(
                 selectinload(PaymentTransaction.order),
