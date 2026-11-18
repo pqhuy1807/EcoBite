@@ -94,6 +94,16 @@ class StoreService:
             )
         return _serialize_store(store)
 
+    async def get_store_by_owner_id(self, owner_id: UUID) -> dict[str, Any]:
+        """Xem thông tin cửa hàng thuộc về owner_id."""
+        store = await store_repo.get_store_by_owner_id(self.db, owner_id)
+        if store is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Không tìm thấy cửa hàng của bạn",
+            )
+        return _serialize_store(store)
+
     async def get_pending_stores(self) -> dict[str, Any]:
         """Tra cứu danh sách các quán đang chờ duyệt KYC (PENDING)."""
         stores = await store_repo.get_pending_stores(self.db)

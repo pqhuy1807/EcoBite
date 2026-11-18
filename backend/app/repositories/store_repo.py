@@ -97,6 +97,13 @@ async def get_store_by_id(db: AsyncSession, store_id: uuid.UUID) -> Store | None
     return await db.get(Store, store_id)
 
 
+async def get_store_by_owner_id(db: AsyncSession, owner_id: uuid.UUID) -> Store | None:
+    """Retrieve a store owned by owner_id, or None when missing."""
+    stmt = select(Store).where(Store.owner_id == owner_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def get_pending_stores(db: AsyncSession) -> list[Store]:
     """Return all stores waiting for KYC review (PENDING), newest first."""
     stmt = (

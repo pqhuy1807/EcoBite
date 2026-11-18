@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DBSession, require_roles
+from app.api.deps import CurrentUser, DBSession, require_roles
 from app.models.user import User, UserRole
 from app.schemas.store import StoreKycReview, StoreOnboardRequest
 from app.services.discovery import DiscoveryService
@@ -28,6 +28,20 @@ async def onboard_store(
     payload = store_in.model_dump() if hasattr(store_in, "model_dump") else store_in
     service = StoreService(db)
     return await service.onboard_store(current_user.id, payload)
+
+
+@router.get("/stores/me")
+@router.get("/me")
+async def get_my_store(
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.STORE_PARTNER)),
+    ],
+    db: DBSession,
+) -> dict[str, Any]:
+    """Xem thông tin cửa hàng thuộc về store partner đang đăng nhập."""
+    service = StoreService(db)
+    return await service.get_store_by_owner_id(current_user.id)
 
 
 @router.get("/stores/nearby")
