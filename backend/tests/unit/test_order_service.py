@@ -6,7 +6,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, time
 from decimal import Decimal
-from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -22,6 +21,7 @@ from app.repositories.order_repo import OrderRepository
 from app.schemas.order import OrderCreate
 from app.services import order_service
 from app.services.order_service import OrderService
+from app.services.qr_service import QRService
 
 # Module-level singletons for argument defaults (avoids bugbear B008 call-in-default).
 ALL_DAY_START = time(0, 0)
@@ -586,3 +586,201 @@ async def test_cancel_order_allows_exactly_at_pickup_deadline(db_session: AsyncS
     cancelled = await service.cancel_order(order.id, consumer_id, now=datetime(2026, 3, 30, 23, 59))
 
     assert cancelled.status == OrderStatus.CANCELLED
+
+
+# ==============================================================================
+# 4. Payment <-> QR Guard: issue_or_get_qr_payload & verify_and_complete_order
+# ==============================================================================
+
+
+async def test_issue_qr_payload_409_when_vnpay_order_not_paid(
+    db_session: AsyncSession,
+) -> None:
+    """409: Đơn VNPAY chưa PAID (PENDING) không được phép tạo/lấy mã QR."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    consumer = await db_session.get(User, consumer_id)
+    assert consumer is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.VNPAY,
+        ),
+        now=FIXED_NOW,
+    )
+    assert order.payment_method == PaymentMethod.VNPAY
+    assert order.payment_status == PaymentStatus.PENDING
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.issue_or_get_qr_payload(order.id, consumer, now=FIXED_NOW)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Đơn hàng VNPAY chưa hoàn tất thanh toán"
+
+
+async def test_issue_qr_payload_allows_vnpay_when_paid(
+    db_session: AsyncSession,
+) -> None:
+    """200: Đơn VNPAY đã PAID được phép tạo/lấy mã QR bình thường."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    consumer = await db_session.get(User, consumer_id)
+    assert consumer is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.VNPAY,
+        ),
+        now=FIXED_NOW,
+    )
+    order.payment_status = PaymentStatus.PAID
+    await db_session.commit()
+
+    qr_resp = await service.issue_or_get_qr_payload(order.id, consumer, now=FIXED_NOW)
+
+    assert qr_resp.order_id == order.id
+    assert qr_resp.qr_payload is not None
+    assert qr_resp.is_used is False
+
+
+async def test_issue_qr_payload_allows_cod_order(
+    db_session: AsyncSession,
+) -> None:
+    """200: Đơn COD (dù payment_status PENDING) vẫn được tạo mã QR nhận món."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    consumer = await db_session.get(User, consumer_id)
+    assert consumer is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+    assert order.payment_method == PaymentMethod.COD
+    assert order.payment_status == PaymentStatus.PENDING
+
+    qr_resp = await service.issue_or_get_qr_payload(order.id, consumer, now=FIXED_NOW)
+
+    assert qr_resp.order_id == order.id
+    assert qr_resp.qr_payload is not None
+
+
+async def test_verify_and_complete_order_409_when_vnpay_order_not_paid(
+    db_session: AsyncSession,
+) -> None:
+    """409: Quét QR đơn VNPAY chưa PAID bị từ chối và đơn không chuyển COMPLETED."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.VNPAY,
+        ),
+        now=FIXED_NOW,
+    )
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Đơn hàng VNPAY chưa hoàn tất thanh toán"
+
+    # Đơn hàng vẫn giữ nguyên trạng thái CONFIRMED
+    persisted = await OrderRepository(db_session).get_by_id(order.id)
+    assert persisted is not None
+    assert persisted.status == OrderStatus.CONFIRMED
+
+
+async def test_verify_and_complete_order_allows_vnpay_when_paid(
+    db_session: AsyncSession,
+) -> None:
+    """200: Quét QR đơn VNPAY đã PAID hoàn tất đơn thành công."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.VNPAY,
+        ),
+        now=FIXED_NOW,
+    )
+    order.payment_status = PaymentStatus.PAID
+    await db_session.commit()
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    result = await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    assert result.success is True
+    assert result.status == OrderStatus.COMPLETED
+
+
+async def test_verify_and_complete_order_allows_cod(
+    db_session: AsyncSession,
+) -> None:
+    """200: Quét QR đơn COD hoàn tất đơn thành công."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    result = await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    assert result.success is True
+    assert result.status == OrderStatus.COMPLETED
