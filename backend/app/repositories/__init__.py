@@ -10,18 +10,22 @@ from app.repositories import (
     order_repo,
     payment_repo,
     qr_token_repo,
+    review_repo,
     store_repo,
     user_repo,
 )
 from app.repositories.qr_token_repo import QRTokenRepository
+from app.repositories.review_repo import ReviewRepository
 
 __all__ = [
     "QRTokenRepository",
+    "ReviewRepository",
     "dish_repo",
     "menu_repo",
     "order_repo",
     "payment_repo",
     "qr_token_repo",
+    "review_repo",
     "store_repo",
     "user_repo",
 ]
