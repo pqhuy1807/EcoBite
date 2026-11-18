@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import distributed_lock
 from app.models.dish import Dish, DishStatus
-from app.models.order import Order, OrderStatus
+from app.models.order import Order, OrderStatus, PaymentMethod, PaymentStatus
 from app.models.user import User, UserRole
 from app.repositories import dish_repo
 from app.repositories.order_repo import OrderRepository
@@ -375,6 +375,8 @@ class OrderService:
                 detail="Bạn không có quyền xem mã QR của đơn hàng này",
             )
 
+        self._validate_payment_ready_for_qr(order)
+
         if order.status not in CANCELLABLE_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -485,7 +487,10 @@ class OrderService:
                 detail="Bạn không có quyền xác thực đơn hàng của cửa hàng này",
             )
 
-        # 5. Validate order status.
+        # 5. Validate payment status.
+        self._validate_payment_ready_for_qr(order)
+
+        # 6. Validate order status.
         if order.status == OrderStatus.COMPLETED:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -495,7 +500,7 @@ class OrderService:
         if order.status not in CANCELLABLE_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(f"Đơn hàng ở trạng thái {order.status.value} " "không thể nhận món"),
+                detail=(f"Đơn hàng ở trạng thái {order.status.value} không thể nhận món"),
             )
 
         order_id = order.id
@@ -548,10 +553,22 @@ class OrderService:
             points_awarded=completed_order.green_points_earned,
             co2_saved_kg=completed_order.co2_saved_kg,
             message=(
-                "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công " "và cộng điểm xanh cho khách."
+                "Xác thực chữ ký hợp lệ! Đã giao món ăn thành công và cộng điểm xanh cho khách."
             ),
             order=OrderResponse.model_validate(completed_order),
         )
+
+    @staticmethod
+    def _validate_payment_ready_for_qr(order: Order) -> None:
+        """Reject QR generation or completion for unpaid VNPAY orders."""
+        if (
+            order.payment_method == PaymentMethod.VNPAY
+            and order.payment_status != PaymentStatus.PAID
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Đơn hàng VNPAY chưa hoàn tất thanh toán",
+            )
 
     @staticmethod
     def _can_view_order(order: Order, user: User) -> bool:
