@@ -29,7 +29,10 @@ class ReviewBase(BaseModel):
 class ReviewCreate(ReviewBase):
     """Payload to submit a review for a completed order."""
 
-    order_id: uuid.UUID = Field(..., description="Mã đơn hàng đã hoàn thành")
+    order_id: uuid.UUID | None = Field(
+        default=None,
+        description="Mã đơn hàng đã hoàn thành (tùy chọn khi truyền qua URL path)",
+    )
 
 
 class ReviewResponse(ReviewBase):
