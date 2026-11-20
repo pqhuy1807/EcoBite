@@ -56,4 +56,3 @@ async def list_store_reviews(
     """Retrieve verified reviews for a store, newest first."""
     reviews = await ReviewService(db).list_store_reviews(store_id, skip=skip, limit=limit)
     return [ReviewResponse.model_validate(r) for r in reviews]
-
