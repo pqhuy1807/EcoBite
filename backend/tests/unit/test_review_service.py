@@ -219,6 +219,52 @@ async def test_create_review_409_when_duplicate_order_id(
     assert "đã được đánh giá" in exc_info.value.detail
 
 
+async def test_create_multiple_reviews_aggregates_store_rating_avg_correctly(
+    db_session: AsyncSession,
+) -> None:
+    """Nhiều review cho các đơn khác nhau của cùng 1 quán tính Store.rating_avg chính xác."""
+    store, consumer, _partner, dish, order1 = await _seed_review_context(
+        db_session, order_status=OrderStatus.COMPLETED
+    )
+    service = ReviewService(db_session)
+
+    # Tạo thêm đơn hàng thứ 2 đã COMPLETED
+    order2 = Order(
+        order_code=f"EB-20261118-{uuid.uuid4().hex[:8].upper()}",
+        consumer_id=consumer.id,
+        store_id=store.id,
+        dish_id=dish.id,
+        quantity=1,
+        unit_price=Decimal("25000.00"),
+        total_amount=Decimal("25000.00"),
+        status=OrderStatus.COMPLETED,
+        payment_method=PaymentMethod.VNPAY,
+        payment_status=PaymentStatus.PAID,
+        pickup_deadline=datetime.now(UTC) + timedelta(hours=2),
+    )
+    db_session.add(order2)
+    await db_session.commit()
+
+    # Review 1: 5 sao
+    await service.create_review(
+        order1.id,
+        consumer,
+        ReviewCreate(order_id=order1.id, rating=5, comment="Đơn 1 rất ngon"),
+    )
+
+    # Review 2: 3 sao
+    await service.create_review(
+        order2.id,
+        consumer,
+        ReviewCreate(order_id=order2.id, rating=3, comment="Đơn 2 bình thường"),
+    )
+
+    # Trung bình: (5 + 3) / 2 = 4.00 sao
+    await db_session.refresh(store)
+    assert store.rating_avg == Decimal("4.00")
+    assert store.rating_count == 2
+
+
 async def test_create_review_404_when_order_not_found(
     db_session: AsyncSession,
 ) -> None:
