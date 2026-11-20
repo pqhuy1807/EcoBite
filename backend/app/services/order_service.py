@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import distributed_lock
 from app.models.dish import Dish, DishStatus
+from app.models.gamification import GreenPointsLedger, PointActionType
 from app.models.order import Order, OrderStatus, PaymentMethod, PaymentStatus
+from app.models.store import Store
 from app.models.user import User, UserRole
 from app.repositories import dish_repo
 from app.repositories.order_repo import OrderRepository
@@ -537,6 +539,32 @@ class OrderService:
                         status_code=status.HTTP_409_CONFLICT,
                         detail=f"Đơn hàng ở trạng thái {current_status_value} không thể nhận món",
                     )
+
+                # 7. Transition COD payment status to PAID upon pickup completion
+                if completed_order.payment_method == PaymentMethod.COD:
+                    completed_order.payment_status = PaymentStatus.PAID
+
+                # 8. Award green points to consumer & record in GreenPointsLedger
+                consumer = await self.db.get(User, completed_order.consumer_id)
+                if consumer is not None:
+                    consumer.green_points_balance += completed_order.green_points_earned
+                    ledger_entry = GreenPointsLedger(
+                        user_id=consumer.id,
+                        order_id=completed_order.id,
+                        points_change=completed_order.green_points_earned,
+                        balance_after=consumer.green_points_balance,
+                        action_type=PointActionType.ORDER_RESCUE,
+                        co2_saved_kg=completed_order.co2_saved_kg,
+                        note=f"Giải cứu đơn hàng {completed_order.order_code}",
+                    )
+                    self.db.add(ledger_entry)
+
+                # 9. Accumulate store's total CO2 saved
+                store = await self.db.get(Store, completed_order.store_id)
+                if store is not None:
+                    store.total_co2_saved_kg = (
+                        store.total_co2_saved_kg or Decimal("0.0")
+                    ) + completed_order.co2_saved_kg
 
                 await self.db.commit()
                 await self.db.refresh(completed_order)
