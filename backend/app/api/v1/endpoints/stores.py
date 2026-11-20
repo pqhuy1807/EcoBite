@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DBSession, require_roles
+from app.api.deps import DBSession, require_roles
 from app.models.user import User, UserRole
 from app.schemas.store import StoreKycReview, StoreOnboardRequest
 from app.services.discovery import DiscoveryService
