@@ -154,4 +154,3 @@ class ReviewRepository:
             await self.db.flush()
 
         return new_rating_avg, new_rating_count
-
