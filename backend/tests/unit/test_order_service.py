@@ -9,9 +9,11 @@ from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dish import Dish, DishStatus
+from app.models.gamification import GreenPointsLedger, PointActionType
 from app.models.menu_item import ItemCategory
 from app.models.order import OrderStatus, PaymentMethod, PaymentStatus
 from app.models.store import KycStatus, Store
@@ -750,6 +752,253 @@ async def test_verify_and_complete_order_allows_vnpay_when_paid(
 
     assert result.success is True
     assert result.status == OrderStatus.COMPLETED
+
+
+async def test_verify_and_complete_order_cod_updates_payment_status_paid(
+    db_session: AsyncSession,
+) -> None:
+    """COD: Quét QR hoàn tất đơn phải cập nhật payment_status thành PAID."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+    assert order.payment_status == PaymentStatus.PENDING
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    result = await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    assert result.success is True
+    assert result.status == OrderStatus.COMPLETED
+
+    refreshed_order = await OrderRepository(db_session).get_by_id(order.id)
+    assert refreshed_order is not None
+    assert refreshed_order.payment_status == PaymentStatus.PAID
+
+
+async def test_verify_and_complete_order_awards_green_points_and_creates_ledger(
+    db_session: AsyncSession,
+) -> None:
+    """Quét QR hoàn tất phải cộng Điểm Xanh cho Consumer và tạo bản ghi GreenPointsLedger."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    consumer = await db_session.get(User, consumer_id)
+    assert consumer is not None
+    initial_points = consumer.green_points_balance
+
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=2,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+    earned_points = order.green_points_earned
+    saved_co2 = order.co2_saved_kg
+    assert earned_points > 0
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    # 1. Kiểm tra số dư Điểm Xanh của khách hàng được cộng chính xác
+    await db_session.refresh(consumer)
+    assert consumer.green_points_balance == initial_points + earned_points
+
+    # 2. Kiểm tra bản ghi sổ cái GreenPointsLedger được tạo với đúng hành vi và CO2
+    ledger_stmt = select(GreenPointsLedger).where(GreenPointsLedger.order_id == order.id)
+    ledger_result = await db_session.execute(ledger_stmt)
+    ledger = ledger_result.scalar_one_or_none()
+
+    assert ledger is not None
+    assert ledger.user_id == consumer.id
+    assert ledger.points_change == earned_points
+    assert ledger.balance_after == initial_points + earned_points
+    assert ledger.action_type == PointActionType.ORDER_RESCUE
+    assert ledger.co2_saved_kg == saved_co2
+
+
+async def test_verify_and_complete_order_accumulates_store_total_co2(
+    db_session: AsyncSession,
+) -> None:
+    """Quét QR hoàn tất phải cộng dồn lượng CO2 giảm phát thải vào Store.total_co2_saved_kg."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    initial_co2 = store.total_co2_saved_kg or Decimal("0.0")
+
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=2,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+    saved_co2 = order.co2_saved_kg
+    assert saved_co2 > Decimal("0.0")
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    await db_session.refresh(store)
+    assert store.total_co2_saved_kg == initial_co2 + saved_co2
+
+
+async def test_verify_and_complete_order_repeat_attempt_does_not_duplicate_points_or_co2(
+    db_session: AsyncSession,
+) -> None:
+    """Quét lại mã QR đã hoàn tất bị từ chối và tuyệt đối không cộng lặp Điểm Xanh/CO2."""
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    consumer = await db_session.get(User, consumer_id)
+    assert consumer is not None
+
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order.id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    # Lần 1: Hoàn tất thành công
+    await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+    await db_session.refresh(consumer)
+    await db_session.refresh(store)
+    points_after_first = consumer.green_points_balance
+    co2_after_first = store.total_co2_saved_kg
+
+    # Lần 2: Quét lại mã QR đó -> Phải ném ngoại lệ HTTP 400 hoặc 409
+    with pytest.raises(HTTPException):
+        await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    # Điểm và CO2 không được cộng thêm lần nữa
+    await db_session.refresh(consumer)
+    await db_session.refresh(store)
+    assert consumer.green_points_balance == points_after_first
+    assert store.total_co2_saved_kg == co2_after_first
+
+    # Sổ cái chỉ có đúng 1 bản ghi cho đơn này
+    ledger_stmt = select(GreenPointsLedger).where(GreenPointsLedger.order_id == order.id)
+    ledger_result = await db_session.execute(ledger_stmt)
+    assert len(ledger_result.scalars().all()) == 1
+
+
+async def test_verify_and_complete_order_rolls_back_transaction_on_failure(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Khi có lỗi trong transaction nhận món, toàn bộ cập nhật (token, order, điểm, CO2)
+    phải rollback hoàn toàn.
+    """
+    dish, consumer_id = await _seed_rescue_dish(db_session)
+    consumer = await db_session.get(User, consumer_id)
+    assert consumer is not None
+    initial_points = consumer.green_points_balance
+
+    store = await db_session.get(Store, dish.store_id)
+    assert store is not None
+    initial_co2 = store.total_co2_saved_kg or Decimal("0.0")
+
+    partner = await db_session.get(User, store.owner_id)
+    assert partner is not None
+
+    service = OrderService(db_session)
+    order = await service.create_rescue_order(
+        consumer_id,
+        OrderCreate(
+            dish_id=dish.id,
+            quantity=1,
+            payment_method=PaymentMethod.COD,
+        ),
+        now=FIXED_NOW,
+    )
+    order_id = order.id
+    store_id = store.id
+
+    qr_payload = await QRService(db_session).generate_order_qr_token(
+        order_id=order_id,
+        user_id=consumer_id,
+        pickup_deadline=order.pickup_deadline,
+        commit=True,
+    )
+
+    # Giả lập lỗi xảy ra khi hoàn tất đơn trong transaction
+    async def mock_fail_complete(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("Simulated failure during order completion")
+
+    monkeypatch.setattr(service.orders, "complete_if_allowed", mock_fail_complete)
+
+    with pytest.raises(RuntimeError):
+        await service.verify_and_complete_order(qr_payload, partner, now=FIXED_NOW)
+
+    # Kiểm tra rollback: Đơn hàng vẫn CONFIRMED, không cộng điểm, không cộng CO2
+    persisted_order = await OrderRepository(db_session).get_by_id(order_id)
+    assert persisted_order is not None
+    assert persisted_order.status == OrderStatus.CONFIRMED
+
+    refreshed_consumer = await db_session.get(User, consumer_id)
+    assert refreshed_consumer is not None
+    assert refreshed_consumer.green_points_balance == initial_points
+
+    refreshed_store = await db_session.get(Store, store_id)
+    assert refreshed_store is not None
+    assert refreshed_store.total_co2_saved_kg == initial_co2
 
 
 async def test_verify_and_complete_order_allows_cod(
