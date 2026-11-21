@@ -114,4 +114,4 @@ As a Store Partner, I want to authenticate as a merchant and verify a consumer's
 ## Assumptions
 
 - Local demo execution uses realistic seeded HCMC stores (with dishes covering active daytime/evening demo hours) and seeded demo accounts (`consumer.an@ecobite.vn` and `merchant.bui@ecobite.vn`).
-- Payment integration (VNPay gateway callback) is out of scope for this functional group; orders default to `COD` or simulated `VNPAY` status for the rescue-to-QR pickup flow.
+- Payment integration (VNPay gateway callback) was originally out of scope for this functional group (orders defaulted to `COD` or simulated `VNPAY` for the rescue-to-QR pickup flow). It has since been implemented under the `payments` domain (`POST /payments/vnpay/create-url`, `GET /payments/vnpay/ipn`, `GET /payments/vnpay/return`) with HMAC-SHA512 verification and idempotent processing — see `AGENTS.md` and the Constitution.
