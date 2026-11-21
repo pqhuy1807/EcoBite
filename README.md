@@ -201,27 +201,30 @@ EcoBite/
 ├── backend/                      # 🔧 Backend FastAPI (Python 3.11) — 3 tầng Router -> Service -> Repository
 │   ├── alembic/                  #    └─ Phiên bản hoá CSDL (Database Migrations)
 │   ├── app/
-│   │   ├── api/v1/endpoints/     #    └─ Tầng HTTP Router (auth.py, dishes.py, menu.py, stores.py, users.py)
-│   │   ├── core/                 #    └─ Cấu hình & Bảo mật (JWT, RBAC, Hashing)
-│   │   ├── db/                   #    └─ Quản lý phiên SQLAlchemy 2.0 (AsyncSession)
+│   │   ├── api/v1/endpoints/     #    └─ Tầng HTTP Router (auth, users, stores, menu, dishes, orders, payments, reviews)
+│   │   ├── core/                 #    └─ Cấu hình & Bảo mật (JWT, RBAC, Hashing, Redis lock)
+│   │   ├── db/                   #    └─ Quản lý phiên SQLAlchemy 2.0 (AsyncSession) + seed dữ liệu demo
 │   │   ├── models/               #    └─ ORM Models (SQLAlchemy 2.0, Mapped[T])
 │   │   ├── repositories/         #    └─ Tầng Truy xuất Dữ liệu — chỉ chứa truy vấn & Atomic Update
 │   │   ├── schemas/              #    └─ DTOs xác thực Pydantic v2
-│   │   ├── services/             #    └─ Tầng Nghiệp vụ (auth, discovery, dish_service, menu_service...)
+│   │   ├── services/             #    └─ Tầng Nghiệp vụ (discovery, dish_service, order_service, payment_service, qr_service, review_service...)
 │   │   └── main.py               #    └─ Điểm khởi tạo ứng dụng + Lifespan Singleton (nạp Model ML)
-│   ├── tests/                    #    └─ Unit & Integration Tests (pytest + conftest fixtures)
+│   ├── tests/                    #    └─ Unit, Integration (kèm concurrency) & Property tests (pytest + conftest fixtures)
 │   ├── alembic.ini
-│   ├── Dockerfile
+│   ├── Dockerfile                #    └─ Image build cho FastAPI (uvicorn)
 │   ├── pyproject.toml            #    └─ Cấu hình Ruff / Mypy / Pytest
 │   ├── requirements.txt
 │   └── SETUP.md                  #    └─ Cẩm nang khắc phục môi trường Python/PowerShell
 │
 ├── frontend/                     # 🖥️ Frontend Next.js 14 App Router (PWA)
-│   ├── src/app/
-│   │   ├── (admin)/              #    └─ Bảng Quản trị: duyệt ATVSTP, giám sát nền tảng
-│   │   ├── (consumer)/           #    └─ Luồng Người mua: Radar tìm món, đặt hàng, mã QR
-│   │   └── (store-partner)/      #    └─ Luồng Chủ quán: Đăng món bằng giọng nói, quét QR nhận món
-│   ├── __tests__/                #    └─ Unit Tests components/hooks (Vitest/Jest)
+│   ├── src/app/                  #    └─ Routes: `/`, `/login`, `/register`, `/orders`, `/store/onboard`, `/store/verify-qr`
+│   ├── src/components/           #    └─ UI (Button, Card, Navbar...), RadarMap (Leaflet), DishCard, OrderModal, AuthGuard
+│   ├── src/services/             #    └─ Service layer gọi REST API qua @/lib/api-client
+│   ├── src/lib/                  #    └─ api-client.ts (Axios + Bearer/refresh) & utils.ts (format VND, khoảng cách...)
+│   ├── src/hooks/                #    └─ useGeolocation và custom hooks
+│   ├── src/providers/            #    └─ TanStack React Query provider
+│   ├── src/types/                #    └─ DTO TypeScript dùng chung (api.ts)
+│   ├── __tests__/                #    └─ Unit Tests components/hooks (scaffold — runner chưa cấu hình)
 │   ├── public/                   #    └─ Tài nguyên tĩnh (hình ảnh, fonts)
 │   ├── package.json
 │   ├── tailwind.config.js
@@ -235,6 +238,11 @@ EcoBite/
 │   └── README.md                 #    └─ Quy chuẩn ML/NLP & cách backend gọi model
 │
 ├── docs/                         # 📚 Bộ tài liệu kỹ thuật chi tiết (Proposal, PRD, ERD, API Spec...)
+│
+├── specs/                        # 📐 Đặc tả SDD theo feature (001-rescue-discovery-order-qr)
+│   └── 001-rescue-discovery-order-qr/  #    └─ spec.md, plan.md, tasks.md, research.md, data-model.md, contracts/
+│
+├── .specify/                     # 🧭 Con trỏ feature đang hoạt động (feature.json) & constitution rút gọn
 │
 └── src/                          # 🧰 Khung công cụ Spec-Kit phát triển hướng đặc tả (Spec-Driven Development)
     └── .specify/
@@ -271,12 +279,15 @@ cp .env.example .env
 
 ```bash
 cd backend
-python3 -m venv venv_backend && source venv_backend/bin/activate
+python -m venv .venv
+# Windows CMD:          .venv\Scripts\activate
+# Windows PowerShell:   .\.venv\Scripts\Activate.ps1
+# Linux / macOS / Git Bash: source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-> Trên **Windows PowerShell**, kích hoạt venv bằng: `venv_backend\Scripts\Activate.ps1` (chi tiết xem `backend/SETUP.md`).
+> Trên **Windows PowerShell**, kích hoạt venv bằng: `.venv\Scripts\Activate.ps1` (chi tiết xem `backend/SETUP.md`).
 > **API Documentation**: Sau khi server chạy, truy cập Swagger UI tại `http://localhost:8000/docs` hoặc ReDoc tại `http://localhost:8000/redoc`.
 
 ### Bước 4. Thiết lập Frontend (Next.js 14 Setup)
@@ -302,7 +313,7 @@ pytest -v
 
 ## Biến Môi trường (Environment Variables)
 
-Sao chép `.env.example` → `.env` và bổ sung giá trị thật. Bảng dưới liệt kê các biến quan trọng nhất theo nhóm:
+Sao chép `.env.example` (root) → `.env` cho hạ tầng Docker & biến client; với backend, dùng `backend/.env.example` làm chuẩn (đã khớp tên field trong `app/core/config.py`). Bảng dưới liệt kê các biến quan trọng nhất theo nhóm:
 
 ### Cơ sở Dữ liệu & Bộ đệm (Database & Cache)
 
@@ -345,6 +356,8 @@ Sao chép `.env.example` → `.env` và bổ sung giá trị thật. Bảng dư�
 | `NEXT_PUBLIC_API_BASE_URL` | Endpoint REST API công khai cho ứng dụng khách. |
 | `NEXT_PUBLIC_DEFAULT_LAT` / `NEXT_PUBLIC_DEFAULT_LNG` | Toạ độ tâm bản đồ mặc định (TP.HCM) cho Radar PostGIS. |
 
+> ⚠️ **Lưu ý đồng bộ tên biến**: Settings backend (`backend/app/core/config.py`, `case_sensitive=True`) đọc trực tiếp các field `SECRET_KEY`, `APP_ENV`, `CORS_ORIGINS`, `DATABASE_URL`, `QR_SIGNATURE_SECRET`, `VNP_*`, `REDIS_URL`. Một số khoá trong `.env.example` (root) như `JWT_SECRET_KEY`, `ENVIRONMENT`, `BACKEND_CORS_ORIGINS` hiện **chưa khớp tên field** và bị bỏ qua im lặng (`extra="ignore"`) — hãy dùng `backend/.env.example` (đã khớp tên field) làm chuẩn cho FastAPI, hoặc đặt thêm `SECRET_KEY` và `CORS_ORIGINS`. `SYNC_DATABASE_URL` không cần khai báo: Alembic tự suy từ `DATABASE_URL` qua property `settings.sync_database_url`.
+
 ---
 
 ## Bộ Tài liệu Kỹ thuật (Documentation Index)
@@ -362,6 +375,8 @@ Sao chép `.env.example` → `.env` và bổ sung giá trị thật. Bảng dư�
 | ⚙️ [`backend/SETUP.md`](backend/SETUP.md) | Cẩm nang khắc phục lỗi môi trường Python/PowerShell/Pylance cho lập trình viên Backend. |
 | 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn ML/NLP, cấu trúc metadata format và hướng dẫn Backend gọi model. |
 | 📜 [`AGENTS.md`](AGENTS.md) | Bộ quy tắc & 8 ranh giới bất khả xâm phạm dành cho AI Coding Assistant. |
+| 🏛️ [`src/.specify/memory/constitution.md`](src/.specify/memory/constitution.md) | Hiến chương kỹ thuật (Constitution) — nguyên tắc bắt buộc cho mọi contributor & AI agent. |
+| 📐 [`specs/001-rescue-discovery-order-qr/`](specs/001-rescue-discovery-order-qr/) | Đặc tả SDD feature hiện tại: spec, plan, tasks (tiến độ), data-model, hợp đồng API. |
 
 ---
 
@@ -398,4 +413,4 @@ Cấu hình trong `.pre-commit-config.yaml` thực thi: **Ruff Linter/Formatter*
 
 - **An toàn Vệ sinh Thực phẩm (Food Safety)**: Nền tảng EcoBite đóng vai trò cầu nối công nghệ. Cửa hàng đối tác chịu trách nhiệm pháp lý trực tiếp về chất lượng thực phẩm và thông tin ATVSTP công bố trên hệ thống.
 - **Cảnh báo Dị ứng bằng AI (AI Allergen Advisory)**: Các thông tin suy luận dị ứng (`INFERRED`) do Gemini AI đưa ra chỉ mang tính chất hỗ trợ tham khảo. Người dùng có tiền sử dị ứng nghiêm trọng được khuyến cáo luôn kiểm tra lại với chủ cửa hàng trước khi tiêu dùng.
-- **License (Giấy phép)**: Dự án thuộc quyền sở hữu học thuật của Group 05 - FIT HCMUS (2024-2025).
+- **License (Giấy phép)**: Dự án thuộc quyền sở hữu học thuật của Group 05 - FIT HCMUS (2024-2026).
