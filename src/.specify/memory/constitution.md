@@ -138,6 +138,7 @@ Backend tests:
 - `backend/tests/conftest.py`
 - `backend/tests/unit/`
 - `backend/tests/integration/`
+- `backend/tests/property/` (property-based tests using Hypothesis)
 
 Frontend tests:
 
@@ -184,4 +185,18 @@ Passing local tests does not replace human review or CI validation.
 - AI Coding Agents MUST explain significant trade-offs and MUST NOT silently weaken security, food-safety, data-integrity, or testing requirements.
 - The Constitution SHOULD be reviewed whenever the architecture, technology stack, or core business rules change.
 
-**Version**: 1.1.0 | **Ratified**: Pending team approval | **Last Amended**: 2026-10-31
+**Version**: 1.2.0 | **Ratified**: Pending team approval | **Last Amended**: 2026-11-20
+
+## Amendment Log
+
+- **1.2.0 (2026-11-20)** — Alignment with the current codebase: the VNPay payment flow (`POST /payments/vnpay/create-url`, `GET /payments/vnpay/ipn`, `GET /payments/vnpay/return` — HMAC-SHA512 signature verification with idempotent processing) and verified reviews (`POST /orders/{order_id}/review`, `GET /stores/{store_id}/reviews`) are now implemented in `backend/app/`, operating under Principles III and V. Added `backend/tests/property/` to the required test structure. No principle was weakened.
+- **1.1.0 (2026-10-31)** — Hardened authentication wording (JWT `SECRET_KEY` via pydantic-settings, bcrypt pin 4.0.1), added async-stack end-to-end requirements, explicit ML lifespan/isolation constraints, and Quality Gates detail.
+- **1.0.0** — Initial ratification draft of the eight Core Principles.
+
+## Implementation Status Appendix (informational, non-normative)
+
+As of 2026-11-20:
+
+- **Implemented backend domains**: `auth` (register / login / refresh), `users` (`/me`), `stores` (onboard, `GET /stores/me`, PostGIS Radar `/stores/nearby`, store detail, admin KYC review), `menu` (CRUD menu-items), `dishes` (batch publish, active list, atomic quantity update), `orders` (placement, history, detail, cancellation, dynamic HMAC-SHA256 pickup QR with anti-replay), `payments` (VNPay create-url / IPN / return with HMAC-SHA512 verification and idempotent processing), `reviews` (verified reviews for `COMPLETED` orders + store rating aggregation).
+- **Implemented frontend routes**: `/`, `/login`, `/register`, `/orders`, `/store/onboard`, `/store/verify-qr`, sharing `@/lib/api-client`, React Query provider, and Leaflet Radar map.
+- **Not yet implemented**: `RecommendationService` (allergen hard filter at the database level remains mandatory when it is built) and the frontend test runner (Vitest wiring per `AGENTS.md`).

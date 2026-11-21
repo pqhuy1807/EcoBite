@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-14
-**Feature**: [spec.md](file:///Users/phungquochuy/Desktop/EcoBite-Platform/specs/001-rescue-discovery-order-qr/spec.md)
+**Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 

@@ -15,14 +15,16 @@
 | ORM & Migration | SQLAlchemy 2.0.30 (async) + Alembic 1.13.1 | App chạy `asyncpg`; Alembic chạy `psycopg2` qua `settings.sync_database_url` |
 | Database | PostgreSQL 16 + PostGIS 3.4 (`postgis/postgis:16-3.4-alpine`) | GeoAlchemy2 0.15.1 + Shapely; dev/test fallback `sqlite+aiosqlite` |
 | Cache | Redis 7 (`redis:7-alpine`) + redis-py 5.0.6 | Async client & distributed lock tại `app/core/redis.py`; cấu hình qua biến môi trường (`REDIS_URL`, `REDIS_LOCK_TIMEOUT_SECONDS`, `REDIS_SOCKET_TIMEOUT_SECONDS`) |
-| Auth | python-jose 3.3.0 + passlib/bcrypt 4.0.1 | JWT HS256, dual token access/refresh |
+| Auth | python-jose 3.3.0 + passlib[bcrypt] 1.7.4 (pin `bcrypt==4.0.1`) | JWT HS256, dual token access/refresh |
 | GenAI | google-genai 1.3.0 (`gemini-2.5-flash`) | Structured Output bọc trong `app/schemas/nlp.py` |
 | ML runtime | torch 2.3.1 + torchvision 0.18.1 | Chỉ suy luận (inference); huấn luyện tách rời trong `ml/` (ultralytics, jupyterlab...) |
 | Backend quality | pytest 8.2.2 + pytest-asyncio 0.23.7, ruff 0.4.9, mypy 1.10 | Nguồn sự thật: `backend/pyproject.toml` (`asyncio_mode = "auto"`, line-length 100, rules `E/F/I/UP/B`, plugin `pydantic.mypy`) |
 | Frontend | Next.js 14.2.4 (App Router), React 18.3, TypeScript 5.4 (`strict: true`), Tailwind CSS 3.4, TanStack React Query 5, Axios 1.7, Leaflet 1.9 + react-leaflet 4.2, html5-qrcode, qrcode.react | Path alias `@/*` → `src/*`; ESLint: `eslint-config-next` |
 | Git hooks | pre-commit 3.7.1 | Chặn `.env`/secrets và file > 5MB (không commit trọng số `.pt`) |
 
-Hạ tầng khởi động bằng `docker-compose.yml` (PostGIS + Redis); biến môi trường mẫu tại `.env.example` (root) và `backend/.env.example`.
+Hạ tầng khởi động bằng `docker-compose.yml` (PostGIS + Redis). Có **hai** file mẫu biến môi trường: `.env.example` (root — cấp biến cho `docker-compose.yml` như `POSTGRES_*`, `REDIS_*` và biến client `NEXT_PUBLIC_*`) và `backend/.env.example` (cấp biến cho FastAPI, **đã khớp** tên field trong `app/core/config.py`).
+
+> ⚠️ **Lưu ý đặt tên biến**: `app/core/config.py` (`case_sensitive=True`, `extra="ignore"`) chỉ đọc các field `SECRET_KEY`, `APP_ENV`, `DEBUG`, `CORS_ORIGINS`, `DATABASE_URL`, `QR_SIGNATURE_SECRET`, `VNP_*`, `REDIS_URL`... Trong `.env.example` (root), các biến `JWT_SECRET_KEY`, `ENVIRONMENT`, `BACKEND_CORS_ORIGINS`, `SYNC_DATABASE_URL` **không khớp tên field** và bị Settings bỏ qua im lặng (`SYNC_DATABASE_URL` không cần thiết — Alembic dùng property `settings.sync_database_url` tự suy từ `DATABASE_URL`). Hãy dùng `backend/.env.example` làm chuẩn cho backend hoặc đặt thêm `SECRET_KEY`/`CORS_ORIGINS`; khi thêm biến mới, luôn đối chiếu tên field trong `config.py`.
 
 ---
 
@@ -40,10 +42,10 @@ Mỗi khi người dùng yêu cầu thêm tính năng, sửa bug hoặc tái c�
 ### Bước 1: Phân tích & Lên Kế hoạch (Analyze & Plan)
 - Đọc kỹ tài liệu nghiệp vụ liên quan trong `docs/`: `00_Project_Proposal_Section_B.md`, `01_PRD_and_User_Stories.md`, `02_System_Architecture.md`, `03_Database_Schema_ERD.md`, `04_API_Specification.md`, `05_Agile_Roadmap_and_Kanban.md`, `06_Environment_and_ML_Setup_Guide.md`, `07_AI_Development_Workflow_and_Quality_Gates.md` (4 Quality Gates).
 - Xác định rõ vai trò truy cập (`UserRole` StrEnum trong `app/models/user.py`: `CONSUMER`, `STORE_PARTNER`, `ADMIN`) và các trường hợp biên (mạng lag, trùng đơn, toạ độ âm, hết hàng → atomic update).
-- Kiểm tra API đã có sẵn trước khi tạo endpoint mới. Bề mặt API hiện tại: `auth` (register / login / refresh), `users` (`/me`), `stores` (onboard, Radar `/stores/nearby`, admin duyệt quán `/admin/stores/*`), `menu` (CRUD menu-items), `dishes` (batch, active, cập nhật số lượng), `orders` (đặt đơn `POST /orders` — chỉ `CONSUMER`, hủy đơn `PATCH /orders/{order_id}/cancel` — `CONSUMER` hoặc `STORE_PARTNER`) — xem `app/api/v1/router.py`.
+- Kiểm tra API đã có sẵn trước khi tạo endpoint mới. Bề mặt API hiện tại: `auth` (register / login / refresh), `users` (`/me`), `stores` (`POST /stores/onboard`, `GET /stores/me`, Radar `GET /stores/nearby`, chi tiết quán `GET /stores/{store_id}`, admin duyệt quán `/admin/stores/*`), `menu` (CRUD menu-items), `dishes` (batch, active, cập nhật số lượng), `orders` (đặt đơn `POST /orders` — chỉ `CONSUMER`, hủy đơn `PATCH /orders/{order_id}/cancel` — `CONSUMER` hoặc `STORE_PARTNER`), `payments` (`POST /payments/vnpay/create-url` — chỉ `CONSUMER`, `GET /payments/vnpay/ipn` webhook công khai, `GET /payments/vnpay/return` verify chữ ký), `reviews` (`POST /orders/{order_id}/review` — chỉ `CONSUMER` đơn `COMPLETED`, `GET /stores/{store_id}/reviews`) — xem `app/api/v1/router.py`.
 
 ### Bước 2: Viết Kiểm thử Song song hoặc Trước (Test-First / TDD)
-- Mọi thao tác dữ liệu trong `backend/app/repositories/`, hàm nghiệp vụ trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/` (`unit/` cho logic & atomic queries, `integration/` cho từng endpoint).
+- Mọi thao tác dữ liệu trong `backend/app/repositories/`, hàm nghiệp vụ trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/` (`unit/` cho logic & atomic queries, `integration/` cho từng endpoint, `property/` cho property-based test với Hypothesis — ví dụ `tests/property/test_auth_preservation.py`).
 - pytest đã bật `asyncio_mode = "auto"` — test và fixture async **không** cần `@pytest.mark.asyncio`. CSDL test là SQLite in-memory (`aiosqlite`) dựng từ `backend/tests/conftest.py`; kiểu PostGIS/JSONB phải giữ dạng "portable" (xem Bước 3) để test xanh mà không cần Postgres thật.
 - Mọi component có logic quan trọng hoặc hook trong `frontend/src/` phải có test trong `frontend/__tests__/components/` hoặc `frontend/__tests__/hooks/`.
   - ⚠️ Test runner frontend **chưa được cấu hình** (chưa có script `test` trong `package.json`): khi viết test frontend đầu tiên, phải wire Vitest (+ Testing Library, jsdom) và thêm script `test` vào `package.json` — không dừng ở việc viết file test mà không chạy được.
@@ -55,7 +57,7 @@ Mỗi khi người dùng yêu cầu thêm tính năng, sửa bug hoặc tái c�
   - `backend/app/repositories/`: Tầng Truy xuất Dữ liệu (`*_repo.py`, chỉ chứa câu lệnh SQLAlchemy 2.0 trên `AsyncSession` và Atomic Update — mẫu chuẩn: `dish_repo.atomic_decrement_quantity`).
   - Tuân thủ FastAPI async/await, Pydantic v2 validation, SQLAlchemy 2.0 type annotations (`Mapped[T]`); **không dùng blocking I/O trong async router** (psycopg2 chỉ dùng cho Alembic).
   - Kiểu dữ liệu "portable" bắt buộc ở model: JSON dùng `JSON_TYPE` (JSONB trên PostgreSQL, JSON trên SQLite) và toạ độ dùng `Geometry(POINT, srid=4326)` có fallback String trên SQLite — xem `app/models/user.py` và `app/models/store.py`.
-- **Frontend**: Next.js 14 App Router (`src/app/`). Client Component chỉ đánh dấu `'use client'` khi có tương tác (state, hook, browser API), còn lại ưu tiên Server Components. Gọi API bắt buộc đi qua axios client `@/lib/api-client` (⚠️ file này **chưa tồn tại** — phải tạo trước khi import); state phía client dùng TanStack React Query (`providers/QueryProvider.tsx`).
+- **Frontend**: Next.js 14 App Router (`src/app/`). Client Component chỉ đánh dấu `'use client'` khi có tương tác (state, hook, browser API), còn lại ưu tiên Server Components. Gọi API bắt buộc đi qua axios client `@/lib/api-client` (đã tồn tại: base URL từ `NEXT_PUBLIC_API_BASE_URL`, tự gắn Bearer token, refresh khi 401); state phía client dùng TanStack React Query (`providers/QueryProvider.tsx`).
 - **Machine Learning**: Tuyệt đối không load model `.pt` trong request body. Model chỉ nạp đúng một lần trong lifespan (`app.main` lifespan hook), lưu Singleton `app.state.ml_model`, suy luận bọc `torch.no_grad()`. Trọng số nằm ngoài git tại `../ml/weights` (biến `ML_WEIGHTS_DIR` / `ML_MODEL_FILENAME`), naming `.pt` theo `ml/README.md`.
 
 ### Bước 4: Tự Chạy Kiểm thử trong Terminal (The Automated Verification Loop)
@@ -123,33 +125,36 @@ pre-commit run --all-files
 ### 3.1 Backend (`backend/`)
 
 - **Application Layers (`Router -> Service -> Repository`)**:
-  - `backend/app/api/v1/endpoints/<domain>.py` — Tầng HTTP Router & RBAC. Hiện tại: `auth.py`, `users.py`, `stores.py`, `menu.py`, `dishes.py`, `orders.py`; mọi router phải đăng ký tại `backend/app/api/v1/router.py`.
-  - `backend/app/services/<domain>_service.py` — Tầng Business Logic, viết theo dạng class `XxxService(db: AsyncSession)` (mẫu chuẩn: `DiscoveryService`, `DishService`). ⚠️ Ba mô-đun cũ đang dùng tên ngắn `user.py`, `auth.py`, `discovery.py` (function-style) — giữ nguyên đường dẫn import, **không đổi tên riêng lẻ**; dịch vụ mới bắt buộc theo chuẩn `<domain>_service.py`.
-  - `backend/app/repositories/<domain>_repo.py` — Tầng Data Access / SQLAlchemy 2.0 `AsyncSession`. Bên trong dùng dạng hàm module (`user_repo.get_by_email`) hoặc 1 class duy nhất (`OrderRepository`) — mỗi file thống nhất một phong cách, không trộn.
+  - `backend/app/api/v1/endpoints/<domain>.py` — Tầng HTTP Router & RBAC. Hiện tại: `auth.py`, `users.py`, `stores.py`, `menu.py`, `dishes.py`, `orders.py`, `payments.py`, `reviews.py`; mọi router phải đăng ký tại `backend/app/api/v1/router.py`.
+  - `backend/app/services/<domain>_service.py` — Tầng Business Logic, viết theo dạng class `XxxService(db: AsyncSession)` (mẫu chuẩn: `DiscoveryService`, `DishService`, `OrderService`, `PaymentService`, `QRService`, `ReviewService`). ⚠️ Ba mô-đun cũ đang dùng tên ngắn `user.py`, `auth.py`, `discovery.py` (function-style) — giữ nguyên đường dẫn import, **không đổi tên riêng lẻ**; dịch vụ mới bắt buộc theo chuẩn `<domain>_service.py`. Hiện tại có: `auth.py`, `discovery.py`, `user.py`, `dish_service.py`, `menu_service.py`, `order_service.py`, `payment_service.py`, `qr_service.py`, `review_service.py`, `store_service.py`.
+  - `backend/app/repositories/<domain>_repo.py` — Tầng Data Access / SQLAlchemy 2.0 `AsyncSession`. Bên trong dùng dạng hàm module (`user_repo.get_by_email`) hoặc 1 class duy nhất (`OrderRepository`) — mỗi file thống nhất một phong cách, không trộn. Hiện tại: `dish_repo.py`, `menu_repo.py`, `order_repo.py`, `payment_repo.py`, `qr_token_repo.py`, `review_repo.py`, `store_repo.py`, `user_repo.py`.
   - `backend/app/models/<domain>.py` — Tầng ORM Models (`Mapped[T]`, UUID PK). Hiện tại: `user`, `store`, `menu_item`, `dish`, `order`, `interaction`, `gamification`.
-  - `backend/app/schemas/<domain>.py` — Tầng Pydantic v2 DTOs. Hiện tại: `user`, `token`, `store`, `menu_item`, `dish`, `order`, `nlp`, `gamification`, `interaction`, `user_preference`.
+  - `backend/app/schemas/<domain>.py` — Tầng Pydantic v2 DTOs. Hiện tại: `user`, `token`, `store`, `menu_item`, `dish`, `order`, `payment`, `nlp`, `gamification`, `interaction`, `user_preference`.
 - **Hạ tầng nội bộ backend**:
   - `backend/app/core/` — `config.py` (`pydantic-settings`), `security.py` (JWT/passlib), `logging.py`, `redis.py` (async Redis client lười + `distributed_lock`: `SET NX EX` + Lua compare-and-delete; Redis chết thì degrade an toàn, DB atomic update vẫn là backstop cuối).
   - `backend/app/db/` — `base.py` (Metadata), `session.py` (`get_db`), `seed.py` (seed dữ liệu demo).
   - `backend/alembic/` — các migration nằm trong `versions/` (migration đầu tiên dựng schema đầy đủ 12 bảng; migration kiểu PostGIS phải giữ tính portable trên SQLite như file mẫu).
 - **Backend Tests**:
-  - `backend/tests/unit/test_<service_or_repo_name>.py` (kèm `test_security.py`, `test_nlp_schemas.py`).
-  - `backend/tests/integration/test_api_<endpoint>.py`.
+  - `backend/tests/unit/test_<service_or_repo_name>.py` (kèm `test_security.py`, `test_nlp_schemas.py`, `test_redis_lock.py`, các bài test model `test_cluster*_models.py`, `test_payment_service.py`, `test_qr_service.py`, `test_review_service.py`, `test_order_service.py`...).
+  - `backend/tests/integration/test_api_<endpoint>.py` (kèm `test_order_concurrency.py` kiểm tra anti-overselling đồng thời).
+  - `backend/tests/property/test_<invariant>.py` — property-based test với Hypothesis.
   - `backend/tests/conftest.py` — fixtures chuẩn: SQLite in-memory (`db_engine`, `db_session`), override `get_db`, HTTP client (ASGI), giả lập JWT qua headers `Authorization` (`store_partner`, `other_store_partner`, `consumer`). ⚠️ Chưa có mock Redis dùng chung trong conftest: test lock dùng fake client nội bộ tại `tests/unit/test_redis_lock.py`; service test chạy ở chế độ degrade (không có Redis server → DB atomic update là backstop). Chỉ thêm fixture mới khi test thật sự cần.
 - **Cấu hình công cụ** tập trung tại `backend/pyproject.toml` và `backend/requirements.txt`. Không thêm cấu hình pytest/ruff/mypy ở file khác.
 
 ### 3.2 Frontend (`frontend/`)
 
-- `frontend/src/app/` — Next.js 14 App Router (⚠️ **chưa tạo** — trang đầu tiên phải được khởi tạo theo chuẩn App Router, không dùng Pages Router).
-- `frontend/src/components/<Component>.tsx` — UI building blocks (Button, Card, Input, Modal, Toast, Navbar, Badge, BottomNavigation). Đặt `'use client'` ngay trên file khi component có state/hook/browser API.
-- `frontend/src/services/<domain>.service.ts` — Service layer gọi REST API backend qua `@/lib/api-client`. ⚠️ `src/lib/api-client.ts` **chưa tồn tại** — phải tạo instance axios đọc thêm biến môi trường `NEXT_PUBLIC_API_BASE_URL` trước khi import.
+- `frontend/src/app/` — Next.js 14 App Router. Route hiện tại: `/` (Radar khám phá + Order modal), `/login`, `/register`, `/orders` (My Orders + QR modal + hủy đơn), `/store/onboard` (KYC), `/store/verify-qr` (quét/xác thực QR của chủ quán); các route group `(admin)`, `(consumer)`, `(store-partner)` mới chỉ là scaffold rỗng (`.gitkeep`). Root layout bọc `QueryProvider`, `Navbar`, `BottomNavigation`.
+- `frontend/src/components/` — `ui/` (Button, Card, Input, Modal, Toast, Navbar, Badge, BottomNavigation), `radar/` (`RadarMap.tsx` Leaflet + `DynamicRadarMap.tsx` lazy-load), `auth/AuthGuard.tsx`, `CountdownTimer.tsx`, `DishCard.tsx`, `OrderModal.tsx`. Đặt `'use client'` ngay trên file khi component có state/hook/browser API.
+- `frontend/src/services/<domain>.service.ts` — Service layer gọi REST API backend qua `@/lib/api-client`. Hiện tại: `auth`, `discovery`, `dish`, `order`, `radar`, `store`.
+- `frontend/src/hooks/useGeolocation.ts` — hook định vị dùng chung.
+- `frontend/src/lib/` — `api-client.ts` (axios instance: base URL từ `NEXT_PUBLIC_API_BASE_URL`, Bearer header, refresh 401), `utils.ts` (`cn`, `formatVND`, `formatDistance`, `formatDateTime`).
 - `frontend/src/types/api.ts` — DTO TypeScript dùng chung cho mọi service.
 - `frontend/src/providers/QueryProvider.tsx` — TanStack React Query provider (bọc trong root layout).
 - **Frontend Tests**:
   - `frontend/__tests__/components/<ComponentName>.test.tsx`
   - `frontend/__tests__/hooks/<hookName>.test.ts`
   - ⚠️ Hai thư mục này hiện chỉ là scaffold (rỗng), test runner **chưa cấu hình** (mục 1, Bước 2).
-- Cấu hình: alias `@/*` → `src/*` trong `tsconfig.json`; ESLint `eslint-config-next` (`.eslintrc.json`); Tailwind config tại `tailwind.config.js`.
+- Cấu hình: alias `@/*` → `src/*` trong `tsconfig.json`; ESLint `eslint-config-next` (`next/core-web-vitals` trong `.eslintrc.json`); Tailwind config tại `tailwind.config.js`; `next.config.mjs` chỉ bật `reactStrictMode`. Scripts `package.json`: `dev`, `build`, `start` (port 3000), `lint`, `type-check` — **chưa có** `test`.
 
 ### 3.3 Máy học (`ml/`)
 
@@ -169,7 +174,14 @@ pre-commit run --all-files
 | `06_Environment_and_ML_Setup_Guide.md` | Hướng dẫn môi trường & ML setup |
 | `07_AI_Development_Workflow_and_Quality_Gates.md` | Quy trình AI & 4 Quality Gates |
 
-### 3.5 Git Commit Message Format (Conventional Commits)
+### 3.5 Spec-Driven Development (Spec-Kit)
+
+- `src/.specify/` — khung Spec-Kit (speckit 1.2.1, integration `agy`): `templates/` (spec/plan/tasks/checklist/constitution), `scripts/powershell/`, `workflows/`, `integrations/` (manifest có hash file — **không sửa tay** templates/scripts vì sẽ lệch hash trong `integrations/*.manifest.json`).
+- `src/.specify/memory/constitution.md` — Hiến chương kỹ thuật (v1.2.0): các nguyên tắc bắt buộc, bổ sung cho `AGENTS.md`.
+- `.specify/feature.json` (root) — con trỏ feature đang hoạt động → `specs/001-rescue-discovery-order-qr`.
+- `specs/001-rescue-discovery-order-qr/` — đặc tả SDD của feature: `spec.md`, `plan.md`, `tasks.md` (đánh dấu `[X]` khi hoàn thành), `research.md`, `data-model.md`, `quickstart.md`, `checklists/`, `contracts/api-contracts.md`. Khi làm feature mới, chạy workflow speckit (`speckit.specify` → `plan` → `tasks` → `implement`) và cập nhật checkbox trong `tasks.md`.
+
+### 3.6 Git Commit Message Format (Conventional Commits)
 
 - `feat(...)`: Tính năng mới
 - `fix(...)`: Sửa lỗi
@@ -180,10 +192,11 @@ pre-commit run --all-files
 
 ---
 
-## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-14)
+## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-20)
 
-- **Backend**: đã có đầy đủ auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes/orders (`POST /orders`, `GET /orders/me`, `GET /orders/store/{store_id}`, `GET /orders/{order_id}`, `POST /orders/{order_id}/qr`, `POST /orders/verify-qr`, `PATCH /orders/{order_id}/cancel`) + `DiscoveryService`, `OrderService`, `QRService` (HMAC-SHA256 + anti-replay). Vẫn **chưa có**: VNPay webhook, `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
-- **Frontend**: đã triển khai đầy đủ luồng SDD `001-rescue-discovery-order-qr` (`src/lib/api-client.ts`, `src/lib/utils.ts`, `src/app/` với `/`, `/login`, `/register`, `/orders`, `/store/verify-qr`, `/store/onboard`, `RadarMap.tsx` tích hợp Leaflet). **Chưa cấu hình** test runner frontend (mục 1, Bước 2).
+- **Backend**: đã có đầy đủ auth/users/stores (onboard, `GET /stores/me`, Radar `/stores/nearby`, chi tiết quán `GET /stores/{store_id}`, admin duyệt quán)/menu/dishes/orders (`POST /orders`, `GET /orders/me`, `GET /orders/store/{store_id}`, `GET /orders/{order_id}`, `POST /orders/{order_id}/qr`, `POST /orders/verify-qr`, `PATCH /orders/{order_id}/cancel`)/payments (`POST /payments/vnpay/create-url`, `GET /payments/vnpay/ipn` — webhook HMAC-SHA512 idempotent qua Redis distributed lock, `GET /payments/vnpay/return`)/reviews (`POST /orders/{order_id}/review` — chỉ đơn `COMPLETED`, `GET /stores/{store_id}/reviews`) + `DiscoveryService`, `OrderService`, `QRService` (HMAC-SHA256 + anti-replay), `PaymentService`, `ReviewService`. Vẫn **chưa có**: `RecommendationService` (gợi ý món) — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
+- **Frontend**: đã triển khai đầy đủ luồng SDD `001-rescue-discovery-order-qr` (`src/lib/api-client.ts`, `src/lib/utils.ts`, `src/app/` với `/`, `/login`, `/register`, `/orders`, `/store/verify-qr`, `/store/onboard`, `RadarMap.tsx` tích hợp Leaflet, `src/services/*`, `src/hooks/useGeolocation.ts`). **Chưa cấu hình** test runner frontend (mục 1, Bước 2).
+- **Kiểm thử**: backend có `unit/`, `integration/` (kèm `test_order_concurrency.py`), `property/` (Hypothesis); tất cả cấu hình tại `backend/pyproject.toml`.
 - Bất kỳ thay đổi nào làm lệch cấu trúc/lệnh trong file này (đổi venv, đổi tên tầng, thêm công cụ validation) phải **cập nhật lại `AGENTS.md`** ngay trong cùng commit.
 
 ---

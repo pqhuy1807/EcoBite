@@ -1,6 +1,6 @@
 # Implementation Plan: Consumer Surplus Discovery, Anti-Overselling Order & Dynamic QR Pickup
 
-**Branch**: `dev` | **Date**: 2026-11-14 | **Spec**: [spec.md](file:///Users/phungquochuy/Desktop/EcoBite-Platform/specs/001-rescue-discovery-order-qr/spec.md)
+**Branch**: `dev` | **Date**: 2026-11-14 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/001-rescue-discovery-order-qr/spec.md`
 
 ## Summary

@@ -5,10 +5,11 @@
 ### Backend (Python 3.11)
 ```bash
 cd backend
-/opt/anaconda3/envs/ecobite_backend/bin/ruff check app/
-/opt/anaconda3/envs/ecobite_backend/bin/ruff format --check app/
-/opt/anaconda3/envs/ecobite_backend/bin/mypy app/
-/opt/anaconda3/envs/ecobite_backend/bin/pytest tests/ -v
+# Kích hoạt venv chuẩn `.venv` (Windows PowerShell: .\.venv\Scripts\Activate.ps1; Linux/macOS: source .venv/bin/activate)
+ruff check app/
+ruff format --check app/
+mypy app/
+pytest tests/ -v
 ```
 
 ### Frontend (Next.js 14 + TypeScript)
@@ -24,18 +25,20 @@ npm run build
 1. **Initialize & Seed Database** (works with SQLite out of the box if Docker is stopped, or PostgreSQL/PostGIS if `docker compose up -d` is running):
    ```bash
    cd backend
-   /opt/anaconda3/envs/ecobite_backend/bin/python -m app.db.seed --reset
+   python -m app.db.seed --reset
    ```
 2. **Start Backend API** (port `8000`):
    ```bash
    cd backend
-   /opt/anaconda3/envs/ecobite_backend/bin/uvicorn app.main:app --reload --port 8000
+   uvicorn app.main:app --reload --port 8000
    ```
 3. **Start Frontend App** (port `3000`):
    ```bash
    cd frontend
-   NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
+   npm install
+   npm run dev
    ```
+   > `NEXT_PUBLIC_API_BASE_URL` mặc định là `http://localhost:8000/api/v1` (xem `frontend/src/lib/api-client.ts`); đặt biến này nếu backend chạy ở cổng/đường dẫn khác.
 
 ## 3. End-to-End Demo Flow
 1. Open `http://localhost:3000/login` and click the **Demo Consumer** quick-fill (`consumer.an@ecobite.vn` / `Password123!`) -> Sign in.
