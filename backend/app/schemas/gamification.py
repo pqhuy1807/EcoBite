@@ -96,3 +96,35 @@ class UserVoucherResponse(BaseModel):
     voucher: VoucherResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==============================================================================
+# 4. Green Points Summary & Voucher Redemption Responses
+# ==============================================================================
+
+
+class GreenPointsSummaryResponse(BaseModel):
+    """Summary of consumer's Green Points balance, CO2 impact, rank, and ledger."""
+
+    balance_points: int = Field(..., ge=0, description="Số dư Điểm Xanh hiện tại")
+    total_co2_saved_kg: Decimal = Field(
+        ..., ge=Decimal("0.0"), description="Tổng lượng khí thải CO2 đã cắt giảm (kg)"
+    )
+    total_meals_saved: int = Field(..., ge=0, description="Tổng số suất ăn đã giải cứu thành công")
+    rank_title: str = Field(..., description="Danh hiệu xếp hạng Xanh theo mốc đóng góp")
+    recent_ledger: list[GreenPointsLedgerResponse] = Field(
+        default_factory=list, description="Lịch sử giao dịch Điểm Xanh gần nhất"
+    )
+
+
+class VoucherRedeemResponse(BaseModel):
+    """Response returned after atomically redeeming a voucher with Green Points."""
+
+    user_voucher_id: uuid.UUID = Field(..., description="ID bản ghi voucher đã sở hữu")
+    voucher_id: uuid.UUID = Field(..., description="ID mẫu voucher trong danh mục")
+    voucher_code: str = Field(..., description="Mã voucher đã đổi")
+    title: str = Field(..., description="Tiêu đề ưu đãi")
+    discount_amount: Decimal = Field(..., gt=Decimal(0), description="Số tiền giảm giá (VNĐ)")
+    points_deducted: int = Field(..., gt=0, description="Số Điểm Xanh đã khấu trừ")
+    remaining_balance: int = Field(..., ge=0, description="Số dư Điểm Xanh còn lại")
+    claimed_at: datetime = Field(..., description="Thời điểm đổi voucher thành công")

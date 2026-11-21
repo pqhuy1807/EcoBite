@@ -1,6 +1,6 @@
 # 📊 Theo dõi Tiến độ Dự án & Scrum Log — Sprint 4 (PA4)
 
-> **Cập nhật lần cuối**: `16/11/2026` (Ngày khởi động Sprint 4)
+> **Cập nhật lần cuối**: `21/11/2026` (Hoàn tất & merge 100% Backend Core F1–F8 vào `dev`)
 > **Mục tiêu tệp**: Ghi nhận tiến độ thực tế theo ngày, trạng thái từng Feature/Task, blockers và biên bản các buổi họp Scrum để tổng hợp trực tiếp vào **Phần D của Báo cáo `docs/PA4.md`**.
 
 ---
@@ -9,12 +9,12 @@
 
 | Phạm vi | Thành phần | Tuần 5 Target (`22/11`) | Tuần 6 Target (`27/11`) | Trạng thái Hiện tại (`16/11`) | Người phụ trách |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **F1** | `GET /stores/me` + Admin KYC UI (`/admin`) | BE + FE Done | Regression + E2E | `TO DO` | Phúc (BE) · Thịnh (FE) |
+| **F1** | `GET /stores/me` + Admin KYC UI (`/admin`) | BE + FE Done | Regression + E2E | `IN PROGRESS` *(BE `/stores/me`: DONE; FE `/admin`: TO DO)* | Phúc (BE) · Thịnh (FE) |
 | **F2 & F3** | Store Portal (`/store/menu`, `/store/dishes`) + sửa `dish.service.ts` | FE Done | Vitest + Polish | `TO DO` | Thịnh (FE) |
 | **F4 & F5** | PostGIS Radar & Atomic Order Lock (từ PA3) | Baseline xanh | Regression + Stock Restore | `DONE (PA3)` | Phúc · Tony |
-| **F6** | VNPay Gateway (HMAC-SHA512, IPN Idempotent, Checkout & Return UI) | BE + FE + Unit Test | Concurrency IPN + Sandbox E2E | `TO DO` | Phúc (BE) · Thịnh (FE) |
-| **F7** | Dynamic QR Guard (`PAID` check, `COD` auto-paid, Store Orders table) | BE Guard + Unit Test | FE Table + Benchmark `< 2s` | `IN PROGRESS` | Tony (BE) · Thịnh (FE) |
-| **F8** | Verified Reviews, Green Points Ledger, CO₂ & Vouchers | BE + Unit Tests + Seed | FE UI (`/green-points`, Review) + Integration Test | `TO DO` | Tony & Huy (BE) · Thịnh (FE) |
+| **F6** | VNPay Gateway (HMAC-SHA512, IPN Idempotent, Checkout & Return UI) | BE + FE + Unit Test | Concurrency IPN + Sandbox E2E | `IN PROGRESS` *(BE VNPay + Tests: DONE; FE Checkout: TO DO)* | Phúc (BE) · Thịnh (FE) |
+| **F7** | Dynamic QR Guard (`PAID` check, `COD` auto-paid, Store Orders table) | BE Guard + Unit Test | FE Table + Benchmark `< 2s` | `IN PROGRESS` *(BE QR Guard + Points/CO₂: DONE; FE Table: TO DO)* | Tony (BE) · Thịnh (FE) |
+| **F8** | Verified Reviews, Green Points Ledger, CO₂ & Vouchers | BE + Unit Tests + Seed | FE UI (`/green-points`, Review) + Integration Test | `IN PROGRESS` *(BE Reviews + Gamification + Seed: DONE; FE UI: TO DO)* | Tony & Huy (BE) · Thịnh (FE) |
 | **QA & Docs** | Env Sync, Vitest, Integration Tests, `docs/PA4.md` & Video Demo | Env Sync + Vitest Setup | Full Gate Pass + Nộp PA4 | `IN PROGRESS` | Tony (QA) · Huy (PM) |
 | **PA5 Head-start** | Nhánh `feat/ai-*`: Gemini Quick-Post + Allergen Hard Filter | *(Chưa mở)* | Khởi động từ `23/11` | `PLANNED` | Huy · Phúc |
 
@@ -44,9 +44,9 @@
 | Ngày | Người phát hiện | Mô tả Blocker / Lệch Hiện trạng | Hướng Xử lý & Người phụ trách | Trạng thái |
 | :---: | :--- | :--- | :--- | :---: |
 | `16/11` | Huy / Tony | `backend/venv_backend` thiếu thư viện `redis` khi chạy `pytest`; đồng thời `AGENTS.md` đang chuẩn hóa tên `.venv`. | **Tony** (`EC4-05`): Đồng bộ cài đủ `backend/requirements.txt`, thống nhất lại môi trường chuẩn và cập nhật `AGENTS.md` nếu cần. | `OPEN` |
-| `16/11` | Huy | Chưa có endpoint `GET /api/v1/stores/me` nên Store Partner UI không lấy được `store_id` & `kyc_status` sau khi đăng nhập. | **Phúc** (`EC4-02`): Thêm `/stores/me` trước route `/stores/{store_id}` trong `stores.py`. | `OPEN` |
+| `16/11` | Huy | Chưa có endpoint `GET /api/v1/stores/me` nên Store Partner UI không lấy được `store_id` & `kyc_status` sau khi đăng nhập. | **Phúc** (`EC4-02`): Thêm `/stores/me` trước route `/stores/{store_id}` trong `stores.py`. | `RESOLVED` |
 | `16/11` | Huy | `frontend/src/services/dish.service.ts` đang gọi `/dishes` và `/dishes/{id}` (không khớp `endpoints/dishes.py`); `PaymentStatus` ở `types/api.ts` thừa `'REFUNDED'` so với backend. | **Thịnh** (`EC4-10`): Sửa `dish.service.ts` và chuẩn hóa `types/api.ts` ngay ngày 1. | `OPEN` |
-| `16/11` | Huy | `OrderService.verify_and_complete_order` hiện chưa kiểm tra `PAID` với đơn `VNPAY` và chưa ghi `GreenPointsLedger` / `User.green_points_balance`. | **Tony** (`EC4-06`): Bổ sung guard `PAID` và atomic cộng điểm xanh + `CO2` khi hoàn tất đơn. | `OPEN` |
+| `16/11` | Huy | `OrderService.verify_and_complete_order` hiện chưa kiểm tra `PAID` với đơn `VNPAY` và chưa ghi `GreenPointsLedger` / `User.green_points_balance`. | **Tony** (`EC4-06`): Bổ sung guard `PAID` và atomic cộng điểm xanh + `CO2` khi hoàn tất đơn. | `RESOLVED` |
 | `16/11` | Huy | `frontend/package.json` chưa cấu hình test runner (`Vitest`). | **Thịnh** (`EC4-10`): Cài Vitest + Testing Library + jsdom, thêm `"test"` script. | `OPEN` |
 
 *(Thêm dòng nhật ký hàng ngày bên dưới trong suốt Sprint 4)*
@@ -54,7 +54,7 @@
 | Ngày | Đặng Trọng Phúc | Đàng Thế Tony | Phùng Quốc Huy | Võ Ngọc Thịnh | Blocker mới |
 | :---: | :--- | :--- | :--- | :--- | :--- |
 | `16/11` | Bắt đầu `EC4-01`, `EC4-02` | Chạy `EC4-05` sync env | Mở Sprint 4, `EC4-08` | Chạy `EC4-10` Vitest + services | Chốt keys VNPay Sandbox tối `16/11` |
-| `17/11` | `—` | `—` | `—` | `—` | `—` |
+| `21/11` | Hoàn tất & merge `EC4-01`..`EC4-04` (VNPay endpoints + `/stores/me` + unit tests) vào `dev` | Hoàn tất & merge `EC4-06`, `EC4-07` (QR Payment Guard, cộng điểm/CO₂ & Verified Reviews + tests) vào `dev` | Hoàn tất & merge `EC4-08`, `EC4-09` (Gamification/Vouchers, `seed.py`, unit & integration tests) vào `dev` | Chưa merge `EC4-10`..`EC4-12` vào `dev` | 100% Backend Core F1–F8 đã đóng trên `dev`; cần review & merge Frontend đợt 1 của Thịnh trước họp chốt `22/11` |
 
 ---
 

@@ -6,6 +6,7 @@ decoupling database persistence from domain business rules in `app.services`.
 
 from app.repositories import (
     dish_repo,
+    gamification_repo,
     menu_repo,
     order_repo,
     payment_repo,
@@ -14,13 +15,16 @@ from app.repositories import (
     store_repo,
     user_repo,
 )
+from app.repositories.gamification_repo import GamificationRepository
 from app.repositories.qr_token_repo import QRTokenRepository
 from app.repositories.review_repo import ReviewRepository
 
 __all__ = [
+    "GamificationRepository",
     "QRTokenRepository",
     "ReviewRepository",
     "dish_repo",
+    "gamification_repo",
     "menu_repo",
     "order_repo",
     "payment_repo",

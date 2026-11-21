@@ -1087,8 +1087,8 @@ STORE_SEEDS_DATA: list[dict[str, Any]] = [
         "location": "POINT(106.6908 10.7712)",
         "kyc_status": KycStatus.REJECTED,
         "kyc_reject_reason": (
-            "Giấy chứng nhận cơ sở đủ điều kiện ATVSTP đã hết hạn hiệu lực từ ngày 15/0 "
-            "9/2026. Đề nghị chủ quán bổ sung giấy cấp mới của Ban Quản lý ATTP TP.HCM."
+            "Giấy chứng nhận cơ sở đủ điều kiện ATVSTP đã hết hạn hiệu lực từ ngày 15/09/2026. "
+            "Đề nghị chủ quán bổ sung giấy cấp mới của Ban Quản lý ATTP TP.HCM."
         ),
         "kyc_license_url": "https://ecobite.vn/static/kyc/license_expired.jpg",
         "avatar_url": "https://images.unsplash.com/photo-1544025162-d76694265947?w=500",
@@ -1321,7 +1321,29 @@ async def seed_data() -> None:
             is_active=True,
         )
 
-        db.add_all([voucher_1, voucher_2])
+        voucher_3 = Voucher(
+            code="ECO25K",
+            title="Voucher Chiến Binh Xanh 25.000đ",
+            description="Giảm 25.000đ cho đơn giải cứu thực phẩm từ 60.000đ",
+            discount_amount=Decimal("25000.00"),
+            points_required=250,
+            min_order_amount=Decimal("60000.00"),
+            expires_at=now + timedelta(days=90),
+            is_active=True,
+        )
+
+        voucher_4 = Voucher(
+            code="ECO50K",
+            title="Siêu Voucher Hành Tinh Xanh 50.000đ",
+            description="Giảm 50.000đ cho đơn giải cứu thực phẩm từ 100.000đ",
+            discount_amount=Decimal("50000.00"),
+            points_required=500,
+            min_order_amount=Decimal("100000.00"),
+            expires_at=now + timedelta(days=120),
+            is_active=True,
+        )
+
+        db.add_all([voucher_1, voucher_2, voucher_3, voucher_4])
         await db.flush()
 
         # Người dùng An đã đổi 1 voucher
@@ -1336,11 +1358,12 @@ async def seed_data() -> None:
         # ======================================================================
         # 4. ORDERS, PAYMENTS, QR TOKENS & REVIEWS
         # ======================================================================
-        print(" [4/5] Creating Sample Confirmed Orders & HMAC QR Tokens...")
+        print(" [4/5] Creating Sample Confirmed/Completed Orders, QR Tokens, Reviews & Ledger...")
         if seeded_dishes:
             sample_dish = seeded_dishes[0]
             sample_store = seeded_stores[0]
 
+            # Đơn CONFIRMED + QRToken chưa dùng để demo quét QR tại quán
             order_1 = Order(
                 order_code="EB-20261102-0001",
                 consumer=consumer_1,
@@ -1359,10 +1382,50 @@ async def seed_data() -> None:
                 co2_saved_kg=Decimal("2.50"),
                 green_points_earned=50,
             )
-            db.add(order_1)
+            # Đơn COMPLETED của An để gắn Verified Review & thống kê CO2/suất cứu thật
+            order_completed_an = Order(
+                order_code="EB-20261101-0001",
+                consumer=consumer_1,
+                store=sample_store,
+                dish=sample_dish,
+                quantity=2,
+                unit_price=sample_dish.rescue_price,
+                total_amount=sample_dish.rescue_price * 2,
+                payment_method=PaymentMethod.VNPAY,
+                payment_status=PaymentStatus.PAID,
+                status=OrderStatus.COMPLETED,
+                pickup_deadline=now - timedelta(days=1, hours=1),
+                completed_at=now - timedelta(days=1),
+                vnpay_pay_date=now - timedelta(days=1, hours=2),
+                vnpay_transaction_no="14567880",
+                vnpay_bank_code="NCB",
+                co2_saved_kg=Decimal("5.00"),
+                green_points_earned=100,
+            )
+            # Đơn COMPLETED của Huy (7 suất = 17.50 kg CO2, 350 Điểm Xanh - Eco Hero)
+            order_completed_huy = Order(
+                order_code="EB-20261101-0002",
+                consumer=consumer_3,
+                store=sample_store,
+                dish=sample_dish,
+                quantity=7,
+                unit_price=sample_dish.rescue_price,
+                total_amount=sample_dish.rescue_price * 7,
+                payment_method=PaymentMethod.VNPAY,
+                payment_status=PaymentStatus.PAID,
+                status=OrderStatus.COMPLETED,
+                pickup_deadline=now - timedelta(days=1, hours=2),
+                completed_at=now - timedelta(days=1),
+                vnpay_pay_date=now - timedelta(days=1, hours=3),
+                vnpay_transaction_no="14567881",
+                vnpay_bank_code="VNPAYQR",
+                co2_saved_kg=Decimal("17.50"),
+                green_points_earned=350,
+            )
+            db.add_all([order_1, order_completed_an, order_completed_huy])
             await db.flush()
 
-            # Dynamic QR Token (HMAC-SHA256 signature)
+            # Dynamic QR Token (HMAC-SHA256 signature) cho đơn đang chờ lấy
             qr_token = QRToken(
                 order=order_1,
                 token_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -1387,9 +1450,9 @@ async def seed_data() -> None:
             )
             db.add(tx)
 
-            # Review hoàn tất
+            # Verified Review gắn trên đơn đã COMPLETED
             review = Review(
-                order=order_1,
+                order=order_completed_an,
                 consumer=consumer_1,
                 dish=sample_dish,
                 store=sample_store,
@@ -1402,17 +1465,50 @@ async def seed_data() -> None:
             )
             db.add(review)
 
-            # Green Points Ledger (+50 points)
-            points_entry = GreenPointsLedger(
-                user=consumer_1,
-                order=order_1,
-                points_change=50,
-                balance_after=230,
-                action_type=PointActionType.ORDER_RESCUE,
-                co2_saved_kg=Decimal("2.50"),
-                note="Cộng 50 Điểm Xanh giải cứu 1 suất Cơm Sườn Bì Chả",
-            )
-            db.add(points_entry)
+            # Green Points Ledger nhất quán với consumer_1.green_points_balance = 180
+            ledger_entries = [
+                GreenPointsLedger(
+                    user=consumer_1,
+                    order=None,
+                    points_change=180,
+                    balance_after=180,
+                    action_type=PointActionType.SYSTEM_BONUS,
+                    co2_saved_kg=Decimal("0.00"),
+                    note="Thưởng chào mừng thành viên EcoBite Xanh",
+                    created_at=now - timedelta(days=3),
+                ),
+                GreenPointsLedger(
+                    user=consumer_1,
+                    order=None,
+                    points_change=-100,
+                    balance_after=80,
+                    action_type=PointActionType.VOUCHER_REDEEM,
+                    co2_saved_kg=Decimal("0.00"),
+                    note="Đổi voucher ECOBITE10K (-100 Điểm Xanh)",
+                    created_at=now - timedelta(days=2),
+                ),
+                GreenPointsLedger(
+                    user=consumer_1,
+                    order=order_completed_an,
+                    points_change=100,
+                    balance_after=180,
+                    action_type=PointActionType.ORDER_RESCUE,
+                    co2_saved_kg=Decimal("5.00"),
+                    note="Cộng 100 Điểm Xanh giải cứu 2 suất Cơm Sườn Bì Chả",
+                    created_at=now - timedelta(days=1),
+                ),
+                GreenPointsLedger(
+                    user=consumer_3,
+                    order=order_completed_huy,
+                    points_change=350,
+                    balance_after=350,
+                    action_type=PointActionType.ORDER_RESCUE,
+                    co2_saved_kg=Decimal("17.50"),
+                    note="Cộng 350 Điểm Xanh giải cứu 7 suất Cơm Sườn Bì Chả",
+                    created_at=now - timedelta(days=1),
+                ),
+            ]
+            db.add_all(ledger_entries)
 
         # ======================================================================
         # 5. NOTIFICATIONS
