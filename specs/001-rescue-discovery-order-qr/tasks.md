@@ -24,7 +24,7 @@
 
 **Purpose**: Core frontend utilities, Axios client, aligned service types, and shared root layout required by every user story.
 
-- [X] T004 [P] Create Tailwind/formatting utility helpers (`cn`, `formatVND`, `formatDistance`, `formatPickupDeadline`) in `frontend/src/lib/utils.ts`
+- [X] T004 [P] Create Tailwind/formatting utility helpers (`cn`, `formatVND`, `formatDistance`, `formatDateTime`) in `frontend/src/lib/utils.ts`
 - [X] T005 [P] Create Axios API client with `NEXT_PUBLIC_API_BASE_URL`, automatic Bearer header injection, and 401 refresh handling in `frontend/src/lib/api-client.ts`
 - [X] T006 [P] Expand shared TypeScript DTOs (`OrderResponse`, `OrderDetailResponse`, `QRPayloadResponse`, `QRVerificationResponse`, `CreateOrderPayload`) in `frontend/src/types/api.ts`
 - [X] T007 [P] Create Tailwind + Leaflet global stylesheet in `frontend/src/app/globals.css` and root layout wrapping `QueryProvider`, `Navbar`, and `BottomNavigation` in `frontend/src/app/layout.tsx`
