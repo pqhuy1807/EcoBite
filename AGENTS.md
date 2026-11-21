@@ -180,9 +180,9 @@ pre-commit run --all-files
 
 ---
 
-## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-14)
+## 4. Ghi chú Trạng thái Repo (Snapshot — cập nhật 2026-11-21)
 
-- **Backend**: đã có đầy đủ auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes/orders (`POST /orders`, `GET /orders/me`, `GET /orders/store/{store_id}`, `GET /orders/{order_id}`, `POST /orders/{order_id}/qr`, `POST /orders/verify-qr`, `PATCH /orders/{order_id}/cancel`) + `DiscoveryService`, `OrderService`, `QRService` (HMAC-SHA256 + anti-replay). Vẫn **chưa có**: VNPay webhook, `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
+- **Backend**: đã có đầy đủ auth/users/stores (onboard, Radar `/stores/nearby`, admin duyệt quán)/menu/dishes/orders (`POST /orders`, `GET /orders/me`, `GET /orders/store/{store_id}`, `GET /orders/{order_id}`, `POST /orders/{order_id}/qr`, `POST /orders/verify-qr`, `PATCH /orders/{order_id}/cancel`), gamification (`GET /green-points/me`, `GET /vouchers`, `GET /vouchers/me`, `POST /vouchers/{voucher_id}/redeem`), `PaymentTransactionRepository` & `PaymentService` (VNPay) + `DiscoveryService`, `OrderService`, `QRService` (HMAC-SHA256 + anti-replay), `GamificationService`. Vẫn **chưa có**: VNPay HTTP endpoints (`endpoints/payments.py`), `ReviewService`, `RecommendationService` — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #7.
 - **Frontend**: đã triển khai đầy đủ luồng SDD `001-rescue-discovery-order-qr` (`src/lib/api-client.ts`, `src/lib/utils.ts`, `src/app/` với `/`, `/login`, `/register`, `/orders`, `/store/verify-qr`, `/store/onboard`, `RadarMap.tsx` tích hợp Leaflet). **Chưa cấu hình** test runner frontend (mục 1, Bước 2).
 - Bất kỳ thay đổi nào làm lệch cấu trúc/lệnh trong file này (đổi venv, đổi tên tầng, thêm công cụ validation) phải **cập nhật lại `AGENTS.md`** ngay trong cùng commit.
 

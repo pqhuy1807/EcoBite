@@ -1,6 +1,6 @@
 # 📊 Theo dõi Tiến độ Dự án & Scrum Log — Sprint 4 (PA4)
 
-> **Cập nhật lần cuối**: `16/11/2026` (Ngày khởi động Sprint 4)
+> **Cập nhật lần cuối**: `21/11/2026` (Hoàn tất phần Backend Gamification/Vouchers & Seed của Huy)
 > **Mục tiêu tệp**: Ghi nhận tiến độ thực tế theo ngày, trạng thái từng Feature/Task, blockers và biên bản các buổi họp Scrum để tổng hợp trực tiếp vào **Phần D của Báo cáo `docs/PA4.md`**.
 
 ---
@@ -14,7 +14,7 @@
 | **F4 & F5** | PostGIS Radar & Atomic Order Lock (từ PA3) | Baseline xanh | Regression + Stock Restore | `DONE (PA3)` | Phúc · Tony |
 | **F6** | VNPay Gateway (HMAC-SHA512, IPN Idempotent, Checkout & Return UI) | BE + FE + Unit Test | Concurrency IPN + Sandbox E2E | `TO DO` | Phúc (BE) · Thịnh (FE) |
 | **F7** | Dynamic QR Guard (`PAID` check, `COD` auto-paid, Store Orders table) | BE Guard + Unit Test | FE Table + Benchmark `< 2s` | `IN PROGRESS` | Tony (BE) · Thịnh (FE) |
-| **F8** | Verified Reviews, Green Points Ledger, CO₂ & Vouchers | BE + Unit Tests + Seed | FE UI (`/green-points`, Review) + Integration Test | `TO DO` | Tony & Huy (BE) · Thịnh (FE) |
+| **F8** | Verified Reviews, Green Points Ledger, CO₂ & Vouchers | BE + Unit Tests + Seed | FE UI (`/green-points`, Review) + Integration Test | `IN PROGRESS` *(Huy BE Gamification & Seed: DONE; Tony Reviews: TO DO)* | Tony & Huy (BE) · Thịnh (FE) |
 | **QA & Docs** | Env Sync, Vitest, Integration Tests, `docs/PA4.md` & Video Demo | Env Sync + Vitest Setup | Full Gate Pass + Nộp PA4 | `IN PROGRESS` | Tony (QA) · Huy (PM) |
 | **PA5 Head-start** | Nhánh `feat/ai-*`: Gemini Quick-Post + Allergen Hard Filter | *(Chưa mở)* | Khởi động từ `23/11` | `PLANNED` | Huy · Phúc |
 
@@ -54,7 +54,7 @@
 | Ngày | Đặng Trọng Phúc | Đàng Thế Tony | Phùng Quốc Huy | Võ Ngọc Thịnh | Blocker mới |
 | :---: | :--- | :--- | :--- | :--- | :--- |
 | `16/11` | Bắt đầu `EC4-01`, `EC4-02` | Chạy `EC4-05` sync env | Mở Sprint 4, `EC4-08` | Chạy `EC4-10` Vitest + services | Chốt keys VNPay Sandbox tối `16/11` |
-| `17/11` | `—` | `—` | `—` | `—` | `—` |
+| `21/11` | Đã merge `payment_repo` & `payment_service` (`EC4-01`, 1 phần `EC4-03`) | Chưa merge `EC4-06`, `EC4-07` | Hoàn tất `EC4-08` & `EC4-09` (`gamification_repo/service/endpoints`, `seed.py`, unit & integration tests) trên nhánh `huy` | Chưa merge `EC4-10`..`EC4-12` | Cần review & merge phần còn lại của Phúc, Tony, Thịnh trước họp chốt `22/11` |
 
 ---
 

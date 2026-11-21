@@ -15,9 +15,11 @@ from app.schemas.gamification import (
     GreenPointsLedgerBase,
     GreenPointsLedgerCreate,
     GreenPointsLedgerResponse,
+    GreenPointsSummaryResponse,
     UserVoucherResponse,
     VoucherBase,
     VoucherCreate,
+    VoucherRedeemResponse,
     VoucherResponse,
 )
 from app.schemas.interaction import (
@@ -117,8 +119,10 @@ __all__ = [
     "GreenPointsLedgerBase",
     "GreenPointsLedgerCreate",
     "GreenPointsLedgerResponse",
+    "GreenPointsSummaryResponse",
     "VoucherBase",
     "VoucherCreate",
+    "VoucherRedeemResponse",
     "VoucherResponse",
     "UserVoucherResponse",
     "ReviewBase",
