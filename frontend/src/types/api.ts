@@ -14,7 +14,7 @@ export type OrderStatus =
     | 'CANCELLED'
     | 'EXPIRED';
 export type PaymentMethod = 'VNPAY' | 'COD';
-export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED';
 
 export interface User {
     id: string;
@@ -60,6 +60,124 @@ export interface StoreOnboardResponse {
     id: string;
     name: string;
     kyc_status: KycStatus;
+    message: string;
+}
+
+export interface StoreDetailResponse {
+    id: string;
+    owner_id?: string;
+    name: string;
+    description?: string | null;
+    address: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    phone?: string | null;
+    kyc_status: KycStatus;
+    kyc_license_url?: string | null;
+    kyc_reject_reason?: string | null;
+    rating_avg?: number;
+    total_co2_saved_kg?: number;
+    created_at?: string;
+}
+
+export interface PendingStoresResponse {
+    total: number;
+    items: StoreDetailResponse[];
+}
+
+export interface ReviewKycPayload {
+    decision: 'APPROVED' | 'REJECTED';
+    reject_reason?: string | null;
+}
+
+export interface ReviewKycResponse {
+    store_id: string;
+    kyc_status: KycStatus;
+    reject_reason: string | null;
+    reviewed_at: string;
+}
+
+export interface MenuItemResponse {
+    id: string;
+    store_id: string;
+    name: string;
+    description?: string | null;
+    category: FoodCategory | string;
+    original_price: number;
+    image_url?: string | null;
+    allergens?: string[];
+    dietary_notes?: string[];
+    is_active: boolean;
+    created_at?: string;
+}
+
+export interface MenuItemCreatePayload {
+    name: string;
+    description?: string | null;
+    category: FoodCategory | string;
+    original_price: number;
+    image_url?: string | null;
+    allergens?: string[];
+    dietary_notes?: string[];
+}
+
+export type MenuItemUpdatePayload = Partial<MenuItemCreatePayload> & {
+    is_active?: boolean;
+};
+
+export interface MenuItemListResponse {
+    total: number;
+    items: MenuItemResponse[];
+}
+
+export interface SurplusDishResponse {
+    id: string;
+    store_id: string;
+    menu_item_id: string;
+    name: string;
+    description?: string | null;
+    category: FoodCategory | string;
+    image_url?: string | null;
+    original_price: number;
+    discounted_price: number;
+    discount_percent: number;
+    initial_quantity: number;
+    remaining_quantity: number;
+    pickup_start_time: string;
+    pickup_end_time: string;
+    rule_discount_start_time?: string | null;
+    allergens?: Array<string | DishAllergenNote>;
+    dietary_notes?: string[];
+    status?: string;
+}
+
+export interface DishPublishPayload {
+    menu_item_id: string;
+    quantity: number;
+    pickup_start_time: string;
+    pickup_end_time: string;
+    rule_discount_start_time?: string | null;
+}
+
+export interface DishBatchPublishPayload {
+    dishes: Array<{
+        menu_item_id: string;
+        quantity: number;
+    }>;
+    pickup_start_time: string;
+    pickup_end_time: string;
+    rule_discount_start_time?: string | null;
+}
+
+export interface ActiveStoreDishesResponse {
+    store_id: string;
+    dishes: SurplusDishResponse[];
+}
+
+export interface UpdateDishQuantityResponse {
+    dish_id?: string;
+    id?: string;
+    remaining_quantity: number;
     message: string;
 }
 
@@ -134,6 +252,17 @@ export interface OrderResponse {
     pickup_deadline: string;
     completed_at?: string | null;
     created_at: string;
+}
+
+export interface VNPayCreateUrlResponse {
+    payment_url: string;
+    txn_ref: string;
+}
+
+export interface VNPayReturnResponse {
+    is_valid: boolean;
+    message: string;
+    txn_ref: string | null;
 }
 
 export interface QRTokenResponse {

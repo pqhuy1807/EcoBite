@@ -3,6 +3,7 @@ import type { StoreOnboardRequest, StoreOnboardResponse } from '@/types/api';
 
 export interface StoreDetailResponse {
     id: string;
+    owner_id?: string;
     name: string;
     description?: string | null;
     address: string;
@@ -11,7 +12,20 @@ export interface StoreDetailResponse {
     phone?: string | null;
     kyc_status: 'PENDING' | 'APPROVED' | 'REJECTED';
     kyc_license_url?: string | null;
+    kyc_reject_reason?: string | null;
     created_at?: string;
+}
+
+export interface PendingStoresResponse {
+    total: number;
+    items: StoreDetailResponse[];
+}
+
+export interface ReviewKycResponse {
+    store_id: string;
+    kyc_status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    reject_reason: string | null;
+    reviewed_at: string;
 }
 
 export interface StoreKycPayload {
@@ -40,6 +54,31 @@ export const storeService = {
 
     async getStoreById(storeId: string): Promise<StoreDetailResponse> {
         const { data } = await apiClient.get<StoreDetailResponse>(`/stores/${storeId}`);
+        return data;
+    },
+
+    async getMyStore(): Promise<StoreDetailResponse> {
+        const { data } = await apiClient.get<StoreDetailResponse>('/stores/me');
+        return data;
+    },
+
+    async getPendingStores(): Promise<StoreDetailResponse[]> {
+        const { data } = await apiClient.get<PendingStoresResponse>('/admin/stores/pending');
+        return data.items;
+    },
+
+    async reviewStoreKyc(
+        storeId: string,
+        decision: 'APPROVED' | 'REJECTED',
+        rejectReason?: string
+    ): Promise<ReviewKycResponse> {
+        const { data } = await apiClient.patch<ReviewKycResponse>(
+            `/admin/stores/${storeId}/review`,
+            {
+                decision,
+                reject_reason: rejectReason ?? null,
+            }
+        );
         return data;
     },
 
