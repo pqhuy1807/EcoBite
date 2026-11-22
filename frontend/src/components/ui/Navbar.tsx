@@ -1,14 +1,17 @@
-// frontend/src/components/ui/Navbar.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+    Award,
+    BookOpen,
     Leaf,
     LogOut,
     MapPin,
+    PackagePlus,
     QrCode,
+    ShieldCheck,
     ShoppingBag,
     Store,
     User as UserIcon,
@@ -17,6 +20,12 @@ import { authService } from '@/services/auth.service';
 import type { User } from '@/types/api';
 import { cn } from '@/lib/utils';
 
+interface NavItem {
+    href: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+}
+
 function readStoredUser(): User | null {
     if (typeof window === 'undefined') return null;
     try {
@@ -24,6 +33,35 @@ function readStoredUser(): User | null {
         return raw ? (JSON.parse(raw) as User) : null;
     } catch {
         return null;
+    }
+}
+
+function getNavItemsByRole(user: User | null): NavItem[] {
+    if (!user) {
+        return [{ href: '/', label: 'Radar Quán Gần Đây', icon: MapPin }];
+    }
+
+    switch (user.role) {
+        case 'CONSUMER':
+            return [
+                { href: '/', label: 'Radar Quán Gần Đây', icon: MapPin },
+                { href: '/orders', label: 'Đơn của tôi', icon: ShoppingBag },
+                { href: '/green-points', label: 'Điểm Xanh', icon: Award },
+            ];
+        case 'STORE_PARTNER':
+            return [
+                { href: '/store/menu', label: 'Thực đơn gốc', icon: BookOpen },
+                { href: '/store/dishes', label: 'Món dư cuối ca', icon: PackagePlus },
+                { href: '/store/verify-qr', label: 'Quét QR Quán', icon: QrCode },
+                { href: '/store/onboard', label: 'Hồ sơ KYC', icon: Store },
+            ];
+        case 'ADMIN':
+            return [
+                { href: '/admin', label: 'Duyệt KYC', icon: ShieldCheck },
+                { href: '/', label: 'Radar Quán Gần Đây', icon: MapPin },
+            ];
+        default:
+            return [{ href: '/', label: 'Radar Quán Gần Đây', icon: MapPin }];
     }
 }
 
@@ -49,14 +87,16 @@ export function Navbar() {
         router.push('/login');
     };
 
+    const navItems = getNavItemsByRole(user);
+
     const roleLabel =
         user?.role === 'CONSUMER'
             ? 'Người giải cứu'
             : user?.role === 'STORE_PARTNER'
-              ? 'Đối tác quán'
-              : user?.role === 'ADMIN'
-                ? 'Quản trị'
-                : '';
+                ? 'Đối tác quán'
+                : user?.role === 'ADMIN'
+                    ? 'Quản trị'
+                    : '';
 
     return (
         <header className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white/95 backdrop-blur-sm">
@@ -71,63 +111,29 @@ export function Navbar() {
                 </Link>
 
                 <nav className="hidden items-center gap-5 md:flex">
-                    <Link
-                        href="/"
-                        className={cn(
-                            'flex items-center gap-1.5 text-sm font-medium transition-colors',
-                            pathname === '/'
-                                ? 'text-emerald-700'
-                                : 'text-gray-600 hover:text-emerald-600'
-                        )}
-                    >
-                        <MapPin className="h-4 w-4" />
-                        Radar Quán Gần Đây
-                    </Link>
+                    {navItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive =
+                            item.href === '/'
+                                ? pathname === '/'
+                                : pathname.startsWith(item.href);
 
-                    {(!user || user.role === 'CONSUMER' || user.role === 'ADMIN') && (
-                        <Link
-                            href="/orders"
-                            className={cn(
-                                'flex items-center gap-1.5 text-sm font-medium transition-colors',
-                                pathname === '/orders'
-                                    ? 'text-emerald-700'
-                                    : 'text-gray-600 hover:text-emerald-600'
-                            )}
-                        >
-                            <ShoppingBag className="h-4 w-4" />
-                            Đơn của tôi
-                        </Link>
-                    )}
-
-                    {(!user || user.role === 'STORE_PARTNER' || user.role === 'ADMIN') && (
-                        <Link
-                            href="/store/verify-qr"
-                            className={cn(
-                                'flex items-center gap-1.5 text-sm font-medium transition-colors',
-                                pathname === '/store/verify-qr'
-                                    ? 'text-emerald-700'
-                                    : 'text-gray-600 hover:text-emerald-600'
-                            )}
-                        >
-                            <QrCode className="h-4 w-4" />
-                            Quét QR Quán
-                        </Link>
-                    )}
-
-                    {(!user || user.role === 'STORE_PARTNER' || user.role === 'ADMIN') && (
-                        <Link
-                            href="/store/onboard"
-                            className={cn(
-                                'flex items-center gap-1.5 text-sm font-medium transition-colors',
-                                pathname === '/store/onboard'
-                                    ? 'text-emerald-700'
-                                    : 'text-gray-600 hover:text-emerald-600'
-                            )}
-                        >
-                            <Store className="h-4 w-4" />
-                            Đăng Ký Cửa Hàng (KYC)
-                        </Link>
-                    )}
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={cn(
+                                    'flex items-center gap-1.5 text-sm font-medium transition-colors',
+                                    isActive
+                                        ? 'text-emerald-700'
+                                        : 'text-gray-600 hover:text-emerald-600'
+                                )}
+                            >
+                                <Icon className="h-4 w-4" />
+                                {item.label}
+                            </Link>
+                        );
+                    })}
                 </nav>
 
                 <div className="flex items-center gap-2.5">
@@ -172,6 +178,34 @@ export function Navbar() {
                     )}
                 </div>
             </div>
+
+            {navItems.length > 1 && (
+                <nav className="flex items-center gap-4 overflow-x-auto border-t border-gray-100 px-4 py-2 md:hidden">
+                    {navItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive =
+                            item.href === '/'
+                                ? pathname === '/'
+                                : pathname.startsWith(item.href);
+
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={cn(
+                                    'flex shrink-0 items-center gap-1.5 text-xs font-medium transition-colors',
+                                    isActive
+                                        ? 'text-emerald-700'
+                                        : 'text-gray-600 hover:text-emerald-600'
+                                )}
+                            >
+                                <Icon className="h-3.5 w-3.5" />
+                                {item.label}
+                            </Link>
+                        );
+                    })}
+                </nav>
+            )}
         </header>
     );
 }
