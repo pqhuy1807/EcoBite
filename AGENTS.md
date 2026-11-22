@@ -43,6 +43,7 @@ Mỗi khi người dùng yêu cầu thêm tính năng, sửa bug hoặc tái c�
 - Đọc kỹ tài liệu nghiệp vụ liên quan trong `docs/`: `00_Project_Proposal_Section_B.md`, `01_PRD_and_User_Stories.md`, `02_System_Architecture.md`, `03_Database_Schema_ERD.md`, `04_API_Specification.md`, `05_Agile_Roadmap_and_Kanban.md`, `06_Environment_and_ML_Setup_Guide.md`, `07_AI_Development_Workflow_and_Quality_Gates.md` (4 Quality Gates).
 - Xác định rõ vai trò truy cập (`UserRole` StrEnum trong `app/models/user.py`: `CONSUMER`, `STORE_PARTNER`, `ADMIN`) và các trường hợp biên (mạng lag, trùng đơn, toạ độ âm, hết hàng → atomic update).
 - Kiểm tra API đã có sẵn trước khi tạo endpoint mới. Bề mặt API hiện tại: `auth` (register / login / refresh), `users` (`/me`), `stores` (`POST /stores/onboard`, `GET /stores/me`, Radar `GET /stores/nearby`, chi tiết quán `GET /stores/{store_id}`, admin duyệt quán `/admin/stores/*`), `menu` (CRUD menu-items), `dishes` (batch, active, cập nhật số lượng), `orders` (đặt đơn `POST /orders` — chỉ `CONSUMER`, hủy đơn `PATCH /orders/{order_id}/cancel` — `CONSUMER` hoặc `STORE_PARTNER`), `payments` (`POST /payments/vnpay/create-url` — chỉ `CONSUMER`, `GET /payments/vnpay/ipn` webhook công khai, `GET /payments/vnpay/return` verify chữ ký), `reviews` (`POST /orders/{order_id}/review` — chỉ `CONSUMER` đơn `COMPLETED`, `GET /stores/{store_id}/reviews`) — xem `app/api/v1/router.py`.
+- Với yêu cầu mơ hồ/nhiều bước: dùng skill `goal` để chốt **Goal Contract** (outcome, acceptance criteria đo được, verification, stop conditions) trước khi viết test. Với công việc có thể chia nhánh: dùng skill `teamwork` để điều phối subagent theo lane, mỗi file chỉ có một người ghi.
 
 ### Bước 2: Viết Kiểm thử Song song hoặc Trước (Test-First / TDD)
 - Mọi thao tác dữ liệu trong `backend/app/repositories/`, hàm nghiệp vụ trong `backend/app/services/` hoặc endpoint trong `backend/app/api/` **bắt buộc** phải có file test tương ứng trong `backend/tests/` (`unit/` cho logic & atomic queries, `integration/` cho từng endpoint, `property/` cho property-based test với Hypothesis — ví dụ `tests/property/test_auth_preservation.py`).
@@ -174,12 +175,17 @@ pre-commit run --all-files
 | `06_Environment_and_ML_Setup_Guide.md` | Hướng dẫn môi trường & ML setup |
 | `07_AI_Development_Workflow_and_Quality_Gates.md` | Quy trình AI & 4 Quality Gates |
 
-### 3.5 Spec-Driven Development (Spec-Kit)
+### 3.5 Spec-Driven Development (Spec-Kit) & Agent Skills
 
-- `src/.specify/` — khung Spec-Kit (speckit 1.2.1, integration `agy`): `templates/` (spec/plan/tasks/checklist/constitution), `scripts/powershell/`, `workflows/`, `integrations/` (manifest có hash file — **không sửa tay** templates/scripts vì sẽ lệch hash trong `integrations/*.manifest.json`).
-- `src/.specify/memory/constitution.md` — Hiến chương kỹ thuật (v1.2.0): các nguyên tắc bắt buộc, bổ sung cho `AGENTS.md`.
-- `.specify/feature.json` (root) — con trỏ feature đang hoạt động → `specs/001-rescue-discovery-order-qr`.
+- `.specify/` (root) — khung Spec-Kit **duy nhất** (speckit 1.2.1, integration `agy`): `templates/` (spec/plan/tasks/checklist/constitution), `scripts/powershell/`, `workflows/`, `integrations/` (manifest có hash file — **không sửa tay** templates/scripts vì sẽ lệch hash trong `integrations/*.manifest.json`), `memory/constitution.md`, `feature.json`. Không còn bản sao `src/.specify/`.
+- `.specify/memory/constitution.md` — Hiến chương kỹ thuật (v1.2.0): các nguyên tắc bắt buộc, bổ sung cho `AGENTS.md`.
+- `.specify/feature.json` — con trỏ feature đang hoạt động → `specs/001-rescue-discovery-order-qr`.
 - `specs/001-rescue-discovery-order-qr/` — đặc tả SDD của feature: `spec.md`, `plan.md`, `tasks.md` (đánh dấu `[X]` khi hoàn thành), `research.md`, `data-model.md`, `quickstart.md`, `checklists/`, `contracts/api-contracts.md`. Khi làm feature mới, chạy workflow speckit (`speckit.specify` → `plan` → `tasks` → `implement`) và cập nhật checkbox trong `tasks.md`.
+- `.agents/skills/` — skills được OpenCode/Antigravity **tự động discover** (không cần trỏ đường dẫn): mỗi skill là một thư mục chứa `SKILL.md`, gọi bằng ID (ví dụ `@goal`, `@teamwork`, `@speckit-plan`). Danh sách hiện có: 10 skill `speckit-*`, `goal`, `teamwork`.
+- Prefix `speckit-` là **namespace của integration `agy`**, không phải tên trang trí: `integrations/agy.manifest.json` hash theo đúng đường dẫn `.agents/skills/speckit-*` và workflow `speckit` ánh xạ `speckit.specify` → `speckit-specify`. **Không đổi tên các thư mục này** (sẽ lệch manifest và gãy workflow; lần `specify init/refresh` sau cũng ghi đè lại). Chỉ `goal` và `teamwork` là skill tùy biến, ID trùng tên thư mục.
+- Quy ước frontmatter: `name` phải trùng **chính xác** tên thư mục skill, chỉ gồm lowercase letters/numbers/hyphens (ví dụ `name: teamwork` cho `.agents/skills/teamwork/SKILL.md`); đặt tên có khoảng trắng sẽ bị VS Code/Copilot diagnostics báo lỗi và có thể không load được.
+  - `goal` — biến yêu cầu mơ hồ thành Goal Contract có acceptance criteria đo được, scope/non-goals, verification commands và stop conditions; chống "done ảo" và scope creep.
+  - `teamwork` — điều phối subagent theo lane: chia file ownership (mỗi file một người ghi), brief tự chứa, chạy song song phần độc lập, serialize file dùng chung, integrate và tự verify.
 
 ### 3.6 Git Commit Message Format (Conventional Commits)
 
@@ -197,6 +203,7 @@ pre-commit run --all-files
 - **Backend**: đã có đầy đủ auth/users/stores (onboard, `GET /stores/me`, Radar `/stores/nearby`, chi tiết quán `GET /stores/{store_id}`, admin duyệt quán)/menu/dishes/orders (`POST /orders`, `GET /orders/me`, `GET /orders/store/{store_id}`, `GET /orders/{order_id}`, `POST /orders/{order_id}/qr`, `POST /orders/verify-qr`, `PATCH /orders/{order_id}/cancel`)/payments (`POST /payments/vnpay/create-url`, `GET /payments/vnpay/ipn` — webhook HMAC-SHA512 idempotent qua Redis distributed lock, `GET /payments/vnpay/return`)/reviews (`POST /orders/{order_id}/review` — chỉ đơn `COMPLETED`, `GET /stores/{store_id}/reviews`)/gamification (`GET /green-points/me`, `GET /vouchers`, `GET /vouchers/me`, `POST /vouchers/{voucher_id}/redeem`) + `DiscoveryService`, `OrderService`, `QRService` (HMAC-SHA256 + anti-replay), `PaymentService`, `ReviewService`, `GamificationService`. Vẫn **chưa có**: `RecommendationService` (gợi ý món) và `QuickPostService` (Gemini 2.5 Flash) — khi triển khai phải tuân thủ đúng Guardrails #3, #4, #6, #7.
 - **Frontend**: đã triển khai đầy đủ luồng SDD `001-rescue-discovery-order-qr` (`src/lib/api-client.ts`, `src/lib/utils.ts`, `src/app/` với `/`, `/login`, `/register`, `/orders`, `/store/verify-qr`, `/store/onboard`, `RadarMap.tsx` tích hợp Leaflet, `src/services/*`, `src/hooks/useGeolocation.ts`). **Chưa cấu hình** test runner frontend (mục 1, Bước 2).
 - **Kiểm thử**: backend có `unit/`, `integration/` (kèm `test_order_concurrency.py`), `property/` (Hypothesis); tất cả cấu hình tại `backend/pyproject.toml`.
+- **Agent Skills**: `.agents/skills/` gồm 10 skill `speckit-*` + `goal` + `teamwork`; OpenCode tự discover và nạp qua tool `skill` bằng ID. `.specify/` đã được gom về root — không còn `src/.specify/`.
 - Bất kỳ thay đổi nào làm lệch cấu trúc/lệnh trong file này (đổi venv, đổi tên tầng, thêm công cụ validation) phải **cập nhật lại `AGENTS.md`** ngay trong cùng commit.
 
 ---

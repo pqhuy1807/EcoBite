@@ -188,7 +188,7 @@ graph TD
 ```text
 EcoBite/
 ├── .agents/                      # ⚙️ Tài nguyên tự động hoá cho AI Coding Agents
-│   └── skills/                   #    └─ Bộ kỹ năng speckit (spec, plan, tasks, implement...)
+│   └── skills/                   #    └─ speckit-*, goal, teamwork (OpenCode tự động discover)
 ├── .env.example                  # 🔐 Biến môi trường mẫu (an toàn để commit)
 ├── .gitignore                    # 🙈 Loại trừ tệp nhạy cảm (.env, weights .pt, venv...)
 ├── .pre-commit-config.yaml       # 🪝 Git Pre-commit Hooks (Ruff, detect-private-key, chặn commit .env)
@@ -242,15 +242,13 @@ EcoBite/
 ├── specs/                        # 📐 Đặc tả SDD theo feature (001-rescue-discovery-order-qr)
 │   └── 001-rescue-discovery-order-qr/  #    └─ spec.md, plan.md, tasks.md, research.md, data-model.md, contracts/
 │
-├── .specify/                     # 🧭 Con trỏ feature đang hoạt động (feature.json) & constitution rút gọn
-│
-└── src/                          # 🧰 Khung công cụ Spec-Kit phát triển hướng đặc tả (Spec-Driven Development)
-    └── .specify/
-        ├── scripts/              #    └─ Kịch bản tự động hoá quy trình spec
-        ├── templates/            #    └─ Mẫu tài liệu spec / plan / tasks
-        ├── memory/               #    └─ Hiến chương dự án (Constitution) & quyết định nhóm
-        ├── workflows/            #    └─ Quy trình làm việc chuẩn hoá
-        └── integrations/         #    └─ Cấu hình tích hợp công cụ AI
+└── .specify/                     # 🧰 Khung Spec-Kit duy nhất (Spec-Driven Development)
+    ├── feature.json              #    └─ Con trỏ feature đang hoạt động
+    ├── memory/constitution.md    #    └─ Hiến chương kỹ thuật (Constitution v1.2.0)
+    ├── scripts/powershell/       #    └─ Kịch bản tự động hoá quy trình spec
+    ├── templates/                #    └─ Mẫu tài liệu spec / plan / tasks / checklist / constitution
+    ├── workflows/                #    └─ Quy trình làm việc chuẩn hoá
+    └── integrations/             #    └─ Manifest tích hợp công cụ AI (agy, speckit)
 ```
 
 ---
@@ -375,7 +373,8 @@ Sao chép `.env.example` (root) → `.env` cho hạ tầng Docker & biến clien
 | ⚙️ [`backend/SETUP.md`](backend/SETUP.md) | Cẩm nang khắc phục lỗi môi trường Python/PowerShell/Pylance cho lập trình viên Backend. |
 | 🤖 [`ml/README.md`](ml/README.md) | Quy chuẩn ML/NLP, cấu trúc metadata format và hướng dẫn Backend gọi model. |
 | 📜 [`AGENTS.md`](AGENTS.md) | Bộ quy tắc & 8 ranh giới bất khả xâm phạm dành cho AI Coding Assistant. |
-| 🏛️ [`src/.specify/memory/constitution.md`](src/.specify/memory/constitution.md) | Hiến chương kỹ thuật (Constitution) — nguyên tắc bắt buộc cho mọi contributor & AI agent. |
+| 🏛️ [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | Hiến chương kỹ thuật (Constitution) — nguyên tắc bắt buộc cho mọi contributor & AI agent. |
+| 🧠 [`.agents/skills/`](.agents/skills/) | Bộ skill tự động cho AI agent: `speckit-*`, `goal` (Goal Contract), `teamwork` (điều phối subagent). |
 | 📐 [`specs/001-rescue-discovery-order-qr/`](specs/001-rescue-discovery-order-qr/) | Đặc tả SDD feature hiện tại: spec, plan, tasks (tiến độ), data-model, hợp đồng API. |
 
 ---
@@ -397,6 +396,20 @@ Mọi commit bám khung `type(scope): description`:
 ### Chu trình Phát triển Bắt buộc (Mandatory Development Loop)
 
 Tuân thủ quy trình 5 bước nêu trong [`AGENTS.md`](AGENTS.md): **Phân tích & Lập kế hoạch (Analyze & Plan)** → **Viết kiểm thử trước (Test-First)** → **Cài đặt (Implement)** → **Chạy vòng kiểm chứng (Verification Loop: `ruff` → `mypy` → `pytest` → `npm run lint` → `npm run type-check`)** → **Đề xuất Commit**. Toàn bộ kiểm tra phải XANH 100% trước khi commit.
+
+### Agent Skills (`.agents/skills/`)
+
+OpenCode/Antigravity tự động discover mọi thư mục có `SKILL.md` trong `.agents/skills/` — **không cần trỏ đường dẫn**. Gọi skill bằng ID:
+
+- `@goal` — chốt Goal Contract (outcome, acceptance criteria đo được, verification, stop conditions) trước khi code; dùng cho yêu cầu mơ hồ hoặc nhiều bước.
+- `@teamwork` — điều phối subagent theo lane, mỗi file chỉ một người ghi; dùng cho việc lớn có thể chia nhánh.
+- `@speckit-plan`, `@speckit-tasks`, `@speckit-implement`... — workflow SDD.
+
+Prefix `speckit-*` là ID do Spec-Kit integration `agy` quản lý (manifest hash + workflow `speckit.specify` → `speckit-specify`), nên **không đổi tên** các thư mục này. Chỉ `goal` và `teamwork` là skill tùy biến với ID ngắn.
+
+Quy ước: `name` trong frontmatter phải trùng **chính xác** tên thư mục, chỉ gồm lowercase letters/numbers/hyphens (ví dụ `name: teamwork` cho `.agents/skills/teamwork/SKILL.md`).
+
+Skill chỉ là hướng dẫn; quyền hạn thực tế vẫn do `AGENTS.md`, `.specify/memory/constitution.md` và tool permissions quyết định.
 
 ### Pre-commit Hooks
 
