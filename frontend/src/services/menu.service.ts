@@ -1,37 +1,10 @@
 import { apiClient } from '@/lib/api-client';
-
-export interface MenuItemResponse {
-    id: string;
-    store_id: string;
-    name: string;
-    description?: string | null;
-    category: string;
-    original_price: number;
-    image_url?: string | null;
-    allergens?: string[];
-    dietary_notes?: string[];
-    is_active: boolean;
-    created_at?: string;
-}
-
-export interface MenuItemCreatePayload {
-    name: string;
-    description?: string | null;
-    category: string;
-    original_price: number;
-    image_url?: string | null;
-    allergens?: string[];
-    dietary_notes?: string[];
-}
-
-export type MenuItemUpdatePayload = Partial<MenuItemCreatePayload> & {
-    is_active?: boolean;
-};
-
-interface MenuItemListResponse {
-    total: number;
-    items: MenuItemResponse[];
-}
+import type {
+    MenuItemCreatePayload,
+    MenuItemListResponse,
+    MenuItemResponse,
+    MenuItemUpdatePayload,
+} from '@/types/api';
 
 export const menuService = {
     async getStoreMenuItems(storeId: string): Promise<MenuItemResponse[]> {
