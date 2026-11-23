@@ -2,6 +2,9 @@
 
 from httpx import AsyncClient
 
+from app.core.security import create_access_token
+from app.models.user import User, UserRole
+
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
 
@@ -195,3 +198,68 @@ async def test_admin_review_requires_valid_decision(client: AsyncClient) -> None
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 422
+
+
+# ==============================================================================
+# GET /api/v1/stores/me
+# ==============================================================================
+
+
+async def test_get_my_store_success_returns_store_profile(
+    client: AsyncClient,
+    store_partner: dict[str, object],
+) -> None:
+    """Authenticated store owner retrieves their own store profile (200 OK)."""
+    response = await client.get(
+        "/api/v1/stores/me",
+        headers=store_partner["headers"],  # type: ignore[index]
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Test Store"
+    assert data["kyc_status"] == "APPROVED"
+    assert "id" in data
+    assert "owner_id" in data
+    assert "latitude" in data
+    assert "longitude" in data
+
+
+async def test_get_my_store_without_token_returns_401(client: AsyncClient) -> None:
+    """Request without Bearer token returns 401 Unauthorized."""
+    response = await client.get("/api/v1/stores/me")
+    assert response.status_code == 401
+
+
+async def test_get_my_store_consumer_returns_403(
+    client: AsyncClient,
+    consumer: dict[str, object],
+) -> None:
+    """Authenticated consumer (non-store role) cannot access /stores/me (403 Forbidden)."""
+    response = await client.get(
+        "/api/v1/stores/me",
+        headers=consumer["headers"],  # type: ignore[index]
+    )
+    assert response.status_code == 403
+
+
+async def test_get_my_store_partner_without_store_returns_404(
+    client: AsyncClient,
+    db_session,
+) -> None:
+    """Authenticated store partner with no onboarded store returns 404 Not Found."""
+    user = User(
+        email="partner_nostore@ecobite.vn",
+        hashed_password="not-used",
+        full_name="Partner No Store",
+        role=UserRole.STORE_PARTNER,
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    response = await client.get(
+        "/api/v1/stores/me",
+        headers=headers,
+    )
+    assert response.status_code == 404
+    assert "Không tìm thấy cửa hàng" in response.json()["detail"]
