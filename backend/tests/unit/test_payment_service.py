@@ -4,16 +4,13 @@ import hashlib
 import hmac
 import uuid
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, status
 
 from app.models.order import Order, OrderStatus, PaymentMethod, PaymentStatus
-from app.repositories.order_repo import OrderRepository
-from app.repositories.payment_repo import PaymentTransactionRepository
 from app.services.payment_service import PaymentService
-
 
 # ==============================================================================
 # 1. HMAC-SHA512 Signature Tests
@@ -29,7 +26,7 @@ class TestPaymentServiceHMACSignature:
         service = PaymentService(mock_db)
 
         # Mock VNP_HASH_SECRET
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
             # Test params (sorted alphabetically for VNPay)
             params = {
                 "vnp_Amount": "1000000",
@@ -69,7 +66,7 @@ class TestPaymentServiceHMACSignature:
         mock_db = MagicMock()
         service = PaymentService(mock_db)
 
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
             params = {
                 "vnp_TxnRef": "EB20261118",
                 "vnp_Amount": "1000000",
@@ -95,7 +92,8 @@ class TestPaymentServiceHMACSignature:
             "vnp_SecureHash": "invalid_signature_here",
         }
 
-        assert service._verify_vnpay_ipn_signature(params) is False
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            assert service._verify_vnpay_ipn_signature(params) is False
 
     def test_verify_vnpay_ipn_signature_missing_hash(self) -> None:
         """Test that missing vnp_SecureHash returns False."""
@@ -136,7 +134,7 @@ class TestPaymentServiceIPNProcessing:
         service = PaymentService(mock_db)
 
         # Mock VNP_HASH_SECRET
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
             params = {
                 "vnp_TxnRef": "EB20261118",
                 "vnp_Amount": "1000000",
@@ -159,17 +157,15 @@ class TestPaymentServiceIPNProcessing:
         mock_order = MagicMock(spec=Order)
         mock_order.total_amount = Decimal("10000.00")
         mock_order.order_code = "EB20261118"
+        service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
 
-        mock_db.execute = AsyncMock()
-        mock_db.get = AsyncMock(return_value=mock_order)
-
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
-            params = {
-                "vnp_TxnRef": "EB20261118",
-                "vnp_Amount": "1500000",  # 15000.00 VND (mismatch)
-                "vnp_ResponseCode": "00",
-                "vnp_SecureHash": "placeholder",
-            }
+        params = {
+            "vnp_TxnRef": "EB20261118",
+            "vnp_Amount": "1500000",  # 15000.00 VND (mismatch)
+            "vnp_ResponseCode": "00",
+        }
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            params["vnp_SecureHash"] = service._generate_vnpay_hash(params)
 
             result = await service.process_vnpay_ipn(params)
 
@@ -180,12 +176,10 @@ class TestPaymentServiceIPNProcessing:
     async def test_process_vnpay_ipn_failed_payment_rollback(self) -> None:
         """Test IPN processing restores inventory when payment fails."""
         mock_db = AsyncMock()
-        mock_dish_repo = MagicMock()
         mock_payment_repo = MagicMock()
 
         service = PaymentService(mock_db)
-        service._dish_repo = mock_dish_repo
-        service._payment_repo = mock_payment_repo
+        service.payments = mock_payment_repo
 
         # Mock order
         mock_order = MagicMock(spec=Order)
@@ -193,25 +187,41 @@ class TestPaymentServiceIPNProcessing:
         mock_order.order_code = "EB20261118"
         mock_order.dish_id = uuid.uuid4()
         mock_order.quantity = 5
+        service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
 
         # Mock payment_repo methods
         mock_payment_repo.get_by_txn_ref = AsyncMock(return_value=None)
+        mock_payment_repo.get_verified_by_txn_ref = AsyncMock(return_value=None)
         mock_payment_repo.create_transaction = AsyncMock(return_value=MagicMock())
 
-        # Mock dish_repo atomic_increment_quantity
-        mock_dish_repo.atomic_increment_quantity = AsyncMock(return_value=MagicMock())
+        # Mock dish_repo.atomic_increment_quantity (module function used by the service)
+        mock_atomic_increment = AsyncMock(return_value=MagicMock())
 
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
-            result = await service.process_vnpay_ipn({
-                "vnp_TxnRef": "EB20261118",
-                "vnp_Amount": "1000000",
-                "vnp_ResponseCode": "05",  # Failed payment
-                "vnp_SecureHash": "placeholder",
-            })
+        params = {
+            "vnp_TxnRef": "EB20261118",
+            "vnp_Amount": "1000000",
+            "vnp_ResponseCode": "05",  # Failed payment
+        }
+        with (
+            patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"),
+            patch("app.services.payment_service.distributed_lock") as mock_distributed_lock,
+            patch(
+                "app.services.payment_service.dish_repo.atomic_increment_quantity",
+                mock_atomic_increment,
+            ),
+        ):
+            lock_context = MagicMock()
+            lock_context.__aenter__ = AsyncMock(return_value=True)
+            lock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_distributed_lock.return_value = lock_context
+
+            params["vnp_SecureHash"] = service._generate_vnpay_hash(params)
+
+            result = await service.process_vnpay_ipn(params)
 
             assert result["RspCode"] == "00"
             # Inventory should be restored atomically
-            mock_dish_repo.atomic_increment_quantity.assert_called_once()
+            mock_atomic_increment.assert_called_once()
 
 
 # ==============================================================================
@@ -238,19 +248,30 @@ class TestPaymentServiceIdempotency:
         lock_context.__aexit__ = AsyncMock(return_value=None)
         mock_distributed_lock.return_value = lock_context
 
-        # Mock transaction already verified
+        # Mock order with matching amount
+        mock_order = MagicMock(spec=Order)
+        mock_order.total_amount = Decimal("10000.00")
+        mock_order.order_code = "EB20261118"
+        service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
+
+        # Mock payment repo: no existing/verified transaction
         mock_payment_repo = MagicMock()
+        mock_payment_repo.get_by_txn_ref = AsyncMock(return_value=None)
         mock_payment_repo.get_verified_by_txn_ref = AsyncMock(
             return_value=MagicMock(is_verified=True),
         )
+        mock_payment_repo.create_transaction = AsyncMock(return_value=MagicMock())
         service.payments = mock_payment_repo
 
-        result = await service.process_vnpay_ipn({
+        params = {
             "vnp_TxnRef": "EB20261118",
             "vnp_Amount": "1000000",
             "vnp_ResponseCode": "00",
-            "vnp_SecureHash": "placeholder",
-        })
+        }
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            params["vnp_SecureHash"] = service._generate_vnpay_hash(params)
+
+            result = await service.process_vnpay_ipn(params)
 
         # Should return success for already processed transaction
         assert result["RspCode"] == "00"
@@ -286,7 +307,7 @@ class TestPaymentServiceCreateUrl:
         mock_order_repo.get_by_id = AsyncMock(return_value=mock_order)
         service.orders = mock_order_repo
 
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
             result = await service.create_vnpay_payment_url(
                 order_id=str(mock_order.id),
                 consumer_id=str(mock_order.consumer_id),
@@ -294,8 +315,8 @@ class TestPaymentServiceCreateUrl:
             )
 
         assert "payment_url" in result
-        assert "vnp_TxnRef" in result
-        assert "vnp_Amount" in result
+        assert "txn_ref" in result
+        assert "vnp_amount" in result
         assert "vnp_SecureHash" in result["payment_url"]
         assert "vnp_ReturnUrl" in result["payment_url"]
 
@@ -319,7 +340,7 @@ class TestPaymentServiceCreateUrl:
         mock_order_repo.get_by_id = AsyncMock(return_value=mock_order)
         service.orders = mock_order_repo
 
-        with patch.object(type(service), "VNP_HASH_SECRET", "test_secret"):
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
             with pytest.raises(HTTPException) as exc_info:
                 await service.create_vnpay_payment_url(
                     order_id=str(mock_order.id),
