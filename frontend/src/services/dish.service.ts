@@ -1,44 +1,14 @@
 import { apiClient } from '@/lib/api-client';
+import type {
+    ActiveStoreDishesResponse,
+    DishBatchPublishPayload,
+    DishPublishPayload,
+    SurplusDishResponse,
+    UpdateDishQuantityResponse,
+} from '@/types/api';
 
-export interface SurplusDishResponse {
-    id: string;
-    store_id: string;
-    menu_item_id: string;
-    name: string;
-    description?: string | null;
-    category: string;
-    image_url?: string | null;
-    original_price: number;
-    discounted_price: number;
-    discount_percent: number;
-    initial_quantity: number;
-    remaining_quantity: number;
-    pickup_start_time: string;
-    pickup_end_time: string;
-    rule_discount_start_time?: string | null;
-    allergens?: string[];
-    status?: string;
-}
-
-export interface DishPublishPayload {
-    menu_item_id: string;
-    quantity: number;
-    pickup_start_time: string;
-    pickup_end_time: string;
-    rule_discount_start_time?: string | null;
-}
-
-interface ActiveStoreDishesResponse {
-    store_id: string;
-    dishes: SurplusDishResponse[];
-}
-
-interface UpdateQuantityResponse {
-    dish_id?: string;
-    id?: string;
-    remaining_quantity: number;
-    message: string;
-}
+export type DishCategory = 'ALL' | 'RICE' | 'NOODLES' | 'BAKERY' | 'VEGETARIAN';
+export type Dish = SurplusDishResponse;
 
 export const dishService = {
     async getActiveStoreDishes(storeId: string): Promise<SurplusDishResponse[]> {
@@ -58,11 +28,21 @@ export const dishService = {
         return data;
     },
 
+    async batchCreateSurplusDishes(
+        payload: DishBatchPublishPayload
+    ): Promise<{ created_count: number; dishes: SurplusDishResponse[] }> {
+        const { data } = await apiClient.post<{
+            created_count: number;
+            dishes: SurplusDishResponse[];
+        }>('/dishes/batch', payload);
+        return data;
+    },
+
     async updateDishQuantity(
         dishId: string,
         quantity: number
-    ): Promise<UpdateQuantityResponse> {
-        const { data } = await apiClient.patch<UpdateQuantityResponse>(
+    ): Promise<UpdateDishQuantityResponse> {
+        const { data } = await apiClient.patch<UpdateDishQuantityResponse>(
             `/dishes/${dishId}/quantity`,
             { quantity }
         );

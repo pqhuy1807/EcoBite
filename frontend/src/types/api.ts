@@ -7,6 +7,8 @@ export type FoodCategory =
     | 'VEGETARIAN'
     | 'DRINKS'
     | 'OTHER';
+export type DietaryType = 'VEGAN' | 'VEGETARIAN' | 'NON_VEGAN';
+export type DishStatus = 'ACTIVE' | 'SOLD_OUT' | 'EXPIRED' | 'HIDDEN';
 export type OrderStatus =
     | 'CONFIRMED'
     | 'READY_FOR_PICKUP'
@@ -97,18 +99,27 @@ export interface ReviewKycResponse {
     reviewed_at: string;
 }
 
+export interface DishAllergenNote {
+    allergen: string;
+    risk_level?: string;
+    source?: 'EXPLICIT' | 'INFERRED' | string;
+    reason?: string | null;
+}
+
 export interface MenuItemResponse {
     id: string;
     store_id: string;
     name: string;
     description?: string | null;
     category: FoodCategory | string;
-    original_price: number;
-    image_url?: string | null;
-    allergens?: string[];
-    dietary_notes?: string[];
+    original_price: string | number;
+    image_url: string;
+    standard_ingredients: string[];
+    base_allergens: string[];
+    dietary_type: DietaryType;
     is_active: boolean;
-    created_at?: string;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface MenuItemCreatePayload {
@@ -116,14 +127,14 @@ export interface MenuItemCreatePayload {
     description?: string | null;
     category: FoodCategory | string;
     original_price: number;
-    image_url?: string | null;
-    allergens?: string[];
-    dietary_notes?: string[];
+    image_url: string;
+    standard_ingredients?: string[];
+    base_allergens?: string[];
+    dietary_type?: DietaryType;
+    is_active?: boolean;
 }
 
-export type MenuItemUpdatePayload = Partial<MenuItemCreatePayload> & {
-    is_active?: boolean;
-};
+export type MenuItemUpdatePayload = Partial<MenuItemCreatePayload>;
 
 export interface MenuItemListResponse {
     total: number;
@@ -133,40 +144,56 @@ export interface MenuItemListResponse {
 export interface SurplusDishResponse {
     id: string;
     store_id: string;
-    menu_item_id: string;
+    menu_item_id?: string | null;
     name: string;
     description?: string | null;
     category: FoodCategory | string;
-    image_url?: string | null;
-    original_price: number;
-    discounted_price: number;
-    discount_percent: number;
-    initial_quantity: number;
-    remaining_quantity: number;
+    original_price: string | number;
+    rescue_price: string | number;
+    rule_discount_price?: string | number | null;
+    override_discounted_price?: string | number | null;
+    current_price?: string | number | null;
+    is_rule_discount_active: boolean;
     pickup_start_time: string;
     pickup_end_time: string;
     rule_discount_start_time?: string | null;
-    allergens?: Array<string | DishAllergenNote>;
-    dietary_notes?: string[];
-    status?: string;
+    image_url?: string | null;
+    ingredients: string[];
+    allergens: DishAllergenNote[];
+    dietary_notes: string[];
+    dietary_type: DietaryType;
+    estimated_co2_kg_per_dish: string | number;
+    total_quantity: number;
+    remaining_quantity: number;
+    status: DishStatus | string;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface DishPublishPayload {
     menu_item_id: string;
-    quantity: number;
+    total_quantity: number;
+    remaining_quantity?: number;
     pickup_start_time: string;
     pickup_end_time: string;
     rule_discount_start_time?: string | null;
+    override_discounted_price?: number | null;
+    allergens?: DishAllergenNote[];
+    dietary_notes?: string[];
 }
 
 export interface DishBatchPublishPayload {
-    dishes: Array<{
-        menu_item_id: string;
-        quantity: number;
-    }>;
     pickup_start_time: string;
     pickup_end_time: string;
     rule_discount_start_time?: string | null;
+    dishes: Array<{
+        menu_item_id: string;
+        quantity: number;
+        remaining_quantity?: number;
+        override_discounted_price?: number | null;
+        allergens?: DishAllergenNote[];
+        dietary_notes?: string[];
+    }>;
 }
 
 export interface ActiveStoreDishesResponse {
@@ -179,13 +206,6 @@ export interface UpdateDishQuantityResponse {
     id?: string;
     remaining_quantity: number;
     message: string;
-}
-
-export interface DishAllergenNote {
-    allergen: string;
-    risk_level?: string;
-    source?: string;
-    reason?: string;
 }
 
 export interface NearbyDishItem {
