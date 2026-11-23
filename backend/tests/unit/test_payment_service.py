@@ -107,6 +107,32 @@ class TestPaymentServiceHMACSignature:
 
         assert service._verify_vnpay_ipn_signature(params) is False
 
+    def test_verify_vnpay_ipn_signature_excludes_secure_hashtype(self) -> None:
+        """Test that vnp_SecureHashType is excluded from hash computation (VNPay spec)."""
+        mock_db = MagicMock()
+        service = PaymentService(mock_db)
+
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            # Hash data must exclude both vnp_SecureHash and vnp_SecureHashType
+            hash_params = {
+                "vnp_TxnRef": "EB20261118",
+                "vnp_Amount": "1000000",
+                "vnp_ResponseCode": "00",
+            }
+            signature = service._generate_vnpay_hash(hash_params)
+
+            # Full params include both signature fields
+            params = {
+                "vnp_TxnRef": "EB20261118",
+                "vnp_Amount": "1000000",
+                "vnp_ResponseCode": "00",
+                "vnp_SecureHashType": "HMACSHA512",
+                "vnp_SecureHash": signature,
+            }
+
+            # Verification strips both vnp_SecureHash and vnp_SecureHashType
+            assert service._verify_vnpay_ipn_signature(params) is True
+
 
 # ==============================================================================
 # 2. IPN Processing Tests
@@ -173,6 +199,49 @@ class TestPaymentServiceIPNProcessing:
             assert "Amount mismatch" in result["Message"]
 
     @pytest.mark.asyncio
+    async def test_process_vnpay_ipn_already_paid_returns_02(self) -> None:
+        """Test IPN idempotency: already-paid order returns 02 without side effects."""
+        mock_db = AsyncMock()
+        service = PaymentService(mock_db)
+
+        # Mock order that is already paid
+        mock_order = MagicMock(spec=Order)
+        mock_order.total_amount = Decimal("10000.00")
+        mock_order.order_code = "EB20261118"
+        mock_order.payment_status = PaymentStatus.PAID
+        mock_order.status = OrderStatus.CONFIRMED
+        service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
+
+        mock_payment_repo = MagicMock()
+        mock_payment_repo.get_by_txn_ref = AsyncMock(return_value=None)
+        mock_payment_repo.get_verified_by_txn_ref = AsyncMock(return_value=None)
+        mock_payment_repo.create_transaction = AsyncMock(return_value=MagicMock())
+        service.payments = mock_payment_repo
+
+        params = {
+            "vnp_TxnRef": "EB20261118",
+            "vnp_Amount": "1000000",
+            "vnp_ResponseCode": "00",
+        }
+        with (
+            patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"),
+            patch("app.services.payment_service.distributed_lock") as mock_distributed_lock,
+        ):
+            lock_context = MagicMock()
+            lock_context.__aenter__ = AsyncMock(return_value=True)
+            lock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_distributed_lock.return_value = lock_context
+
+            params["vnp_SecureHash"] = service._generate_vnpay_hash(params)
+
+            result = await service.process_vnpay_ipn(params)
+
+        assert result["RspCode"] == "02"
+        assert "Transaction already processed" in result["Message"]
+        # Stock should NOT be restored for an already-paid order
+        mock_payment_repo.create_transaction.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_process_vnpay_ipn_failed_payment_rollback(self) -> None:
         """Test IPN processing restores inventory when payment fails."""
         mock_db = AsyncMock()
@@ -187,6 +256,8 @@ class TestPaymentServiceIPNProcessing:
         mock_order.order_code = "EB20261118"
         mock_order.dish_id = uuid.uuid4()
         mock_order.quantity = 5
+        mock_order.status = OrderStatus.CONFIRMED
+        mock_order.payment_status = PaymentStatus.PENDING
         service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
 
         # Mock payment_repo methods
@@ -276,6 +347,93 @@ class TestPaymentServiceIdempotency:
         # Should return success for already processed transaction
         assert result["RspCode"] == "00"
         assert "Success" in result["Message"]
+
+    @pytest.mark.asyncio
+    @patch("app.services.payment_service.distributed_lock")
+    async def test_process_vnpay_ipn_duplicate_verified_transaction_returns_02(
+        self,
+        mock_distributed_lock: MagicMock,
+    ) -> None:
+        """Test that a duplicate IPN with an already-verified transaction returns 02."""
+        mock_db = AsyncMock()
+        service = PaymentService(mock_db)
+
+        lock_context = MagicMock()
+        lock_context.__aenter__ = AsyncMock(return_value=True)
+        lock_context.__aexit__ = AsyncMock(return_value=None)
+        mock_distributed_lock.return_value = lock_context
+
+        mock_order = MagicMock(spec=Order)
+        mock_order.total_amount = Decimal("10000.00")
+        mock_order.order_code = "EB20261118"
+        service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
+
+        # A verified transaction already exists for this txn_ref
+        mock_payment_repo = MagicMock()
+        mock_payment_repo.get_by_txn_ref = AsyncMock(
+            return_value=MagicMock(is_verified=True),
+        )
+        mock_payment_repo.get_verified_by_txn_ref = AsyncMock(return_value=None)
+        mock_payment_repo.create_transaction = AsyncMock(return_value=MagicMock())
+        service.payments = mock_payment_repo
+
+        params = {
+            "vnp_TxnRef": "EB20261118",
+            "vnp_Amount": "1000000",
+            "vnp_ResponseCode": "00",
+        }
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            params["vnp_SecureHash"] = service._generate_vnpay_hash(params)
+
+            result = await service.process_vnpay_ipn(params)
+
+        assert result["RspCode"] == "02"
+        assert "Transaction already processed" in result["Message"]
+        # No new transaction should be created for a duplicate
+        mock_payment_repo.create_transaction.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.services.payment_service.distributed_lock")
+    async def test_process_vnpay_ipn_lock_not_acquired_returns_00(
+        self,
+        mock_distributed_lock: MagicMock,
+    ) -> None:
+        """Test that when the lock is not acquired, IPN returns 00 (avoid racing)."""
+        mock_db = AsyncMock()
+        service = PaymentService(mock_db)
+
+        # Lock NOT acquired
+        lock_context = MagicMock()
+        lock_context.__aenter__ = AsyncMock(return_value=False)
+        lock_context.__aexit__ = AsyncMock(return_value=None)
+        mock_distributed_lock.return_value = lock_context
+
+        mock_order = MagicMock(spec=Order)
+        mock_order.total_amount = Decimal("10000.00")
+        mock_order.order_code = "EB20261118"
+        service.orders.get_by_order_code = AsyncMock(return_value=mock_order)
+
+        mock_payment_repo = MagicMock()
+        mock_payment_repo.get_by_txn_ref = AsyncMock(return_value=None)
+        mock_payment_repo.get_verified_by_txn_ref = AsyncMock(return_value=None)
+        mock_payment_repo.create_transaction = AsyncMock(return_value=MagicMock())
+        service.payments = mock_payment_repo
+
+        params = {
+            "vnp_TxnRef": "EB20261118",
+            "vnp_Amount": "1000000",
+            "vnp_ResponseCode": "00",
+        }
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            params["vnp_SecureHash"] = service._generate_vnpay_hash(params)
+
+            result = await service.process_vnpay_ipn(params)
+
+        # When lock not acquired, return 00 to tell VNPay not to retry
+        assert result["RspCode"] == "00"
+        assert "Success" in result["Message"]
+        # No side effects should occur while another worker is processing
+        mock_payment_repo.create_transaction.assert_not_called()
 
 
 # ==============================================================================

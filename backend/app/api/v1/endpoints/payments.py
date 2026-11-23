@@ -114,12 +114,8 @@ async def vnpay_return(
         dict with is_valid, message, txn_ref, and payment status
     """
     query_params = dict(request.query_params)
-    # Note: Signature verification doesn't require DB, but PaymentService
-    # constructor requires AsyncSession. Use a mock session.
-    from unittest.mock import MagicMock
-    mock_db = MagicMock()
-    payment_service = PaymentService(mock_db)
-    is_valid, message, txn_ref = payment_service.verify_vnpay_return(query_params)
+    # Signature verification is stateless and needs no DB session.
+    is_valid, message, txn_ref = PaymentService.verify_vnpay_return(query_params)
 
     return {
         "is_valid": is_valid,

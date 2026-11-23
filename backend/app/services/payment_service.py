@@ -141,7 +141,8 @@ class PaymentService:
             "vnp_amount": vnp_amount,
         }
 
-    def _generate_vnpay_hash(self, params: dict[str, Any]) -> str:
+    @staticmethod
+    def _generate_vnpay_hash(params: dict[str, Any]) -> str:
         """Generate HMAC-SHA512 signature for VNPay request/response.
 
         Args:
@@ -249,6 +250,11 @@ class PaymentService:
                 if existing and existing.is_verified:
                     logger.info("IPN already processed for txn_ref=%s", txn_ref)
                     return {"RspCode": "00", "Message": "Success"}
+                # Another worker is still processing; avoid racing and let it
+                # complete. Returning success tells VNPay not to retry while the
+                # other worker finalizes the transaction.
+                logger.info("IPN still being processed for txn_ref=%s", txn_ref)
+                return {"RspCode": "00", "Message": "Success"}
 
             # 7. Check for duplicate processing
             existing_transaction = await self.payments.get_by_txn_ref(txn_ref)
@@ -299,6 +305,22 @@ class PaymentService:
             raw_ipn_payload=raw_ipn_payload,
             commit=False,
         )
+        # The IPN HMAC-SHA512 was already verified upstream, so mark the
+        # transaction as verified. This is what makes the duplicate-IPN
+        # idempotency check (`get_by_txn_ref` + `is_verified`) actually work.
+        transaction.is_verified = True
+
+        # Idempotency: do not re-confirm an order that is already paid.
+        if order.payment_status == PaymentStatus.PAID:
+            await self.db.commit()
+            await self.db.refresh(transaction)
+            await self.db.refresh(order)
+            logger.info(
+                "Payment already processed for order_id=%s, txn_ref=%s",
+                order.id,
+                txn_ref,
+            )
+            return {"RspCode": "02", "Message": "Transaction already processed"}
 
         # Update order payment status
         order.payment_status = PaymentStatus.PAID
@@ -328,6 +350,23 @@ class PaymentService:
         raw_ipn_payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Process failed VNPay payment - mark order as failed and restore inventory."""
+        # Status-transition integrity: only fail/cancel orders that are still
+        # pending payment. A completed or already-cancelled order must not be
+        # transitioned again, and its stock must not be restored twice.
+        if order.payment_status != PaymentStatus.PENDING or order.status not in (
+            OrderStatus.CONFIRMED,
+            OrderStatus.READY_FOR_PICKUP,
+        ):
+            logger.warning(
+                "Failed IPN ignored for non-pending order_id=%s, txn_ref=%s "
+                "(status=%s, payment_status=%s)",
+                order.id,
+                txn_ref,
+                order.status,
+                order.payment_status,
+            )
+            return {"RspCode": "02", "Message": "Transaction already processed"}
+
         # Create unverified payment transaction for audit
         transaction = await self.payments.create_transaction(
             order_id=order.id,
@@ -372,8 +411,8 @@ class PaymentService:
 
         return {"RspCode": "00", "Message": "Payment failed"}
 
+    @staticmethod
     def verify_vnpay_return(
-        self,
         query_params: dict[str, Any],
     ) -> tuple[bool, str, str]:
         """Verify HMAC-SHA512 signature for VNPay return URL (client-side redirect).
@@ -395,7 +434,7 @@ class PaymentService:
             return (False, "Missing transaction reference", "")
 
         # 2. Verify HMAC-SHA512 signature
-        is_valid = self._verify_vnpay_ipn_signature(query_params)
+        is_valid = PaymentService._verify_vnpay_ipn_signature(query_params)
 
         if not is_valid:
             logger.warning("Return URL signature verification failed for txn_ref=%s", txn_ref)
@@ -403,7 +442,8 @@ class PaymentService:
 
         return (True, "Signature verified", txn_ref)
 
-    def _verify_vnpay_ipn_signature(self, params: dict[str, Any]) -> bool:
+    @staticmethod
+    def _verify_vnpay_ipn_signature(params: dict[str, Any]) -> bool:
         """Verify HMAC-SHA512 signature for VNPay IPN/return.
 
         Args:
@@ -418,11 +458,13 @@ class PaymentService:
             logger.warning("Missing vnp_SecureHash in parameters")
             return False
 
-        # Remove vnp_SecureHash for hash computation
-        params_without_hash = {k: v for k, v in params.items() if k != "vnp_SecureHash"}
+        # Remove vnp_SecureHash and vnp_SecureHashType for hash computation (VNPay spec)
+        params_without_hash = {
+            k: v for k, v in params.items() if k not in ("vnp_SecureHash", "vnp_SecureHashType")
+        }
 
         # Generate expected hash
-        expected_hash = self._generate_vnpay_hash(params_without_hash)
+        expected_hash = PaymentService._generate_vnpay_hash(params_without_hash)
 
         # Use constant-time comparison to prevent timing attacks
         return hmac.compare_digest(expected_hash, provided_hash)
