@@ -75,6 +75,41 @@ async def test_onboard_store_rejects_out_of_range_coordinates(db_session: AsyncS
     assert bad_lng.value.status_code == 400
 
 
+async def test_get_store_by_owner_id_returns_serialized_store(db_session: AsyncSession) -> None:
+    """GET /stores/me: lấy thành công thông tin cửa hàng của owner_id, giải mã tọa độ và KYC."""
+    partner = await _create_partner(db_session)
+    store = await store_repo.create_store(
+        db_session,
+        owner_id=partner.id,
+        name="Quán Của Tôi",
+        description=None,
+        address="88 Lê Thánh Tôn, Q.1",
+        phone=None,
+        avatar_url=None,
+        kyc_license_url=None,
+        latitude=10.78,
+        longitude=106.70,
+    )
+
+    detail = await StoreService(db_session).get_store_by_owner_id(partner.id)
+    assert detail["id"] == str(store.id)
+    assert detail["owner_id"] == str(partner.id)
+    assert detail["name"] == "Quán Của Tôi"
+    assert detail["latitude"] == 10.78
+    assert detail["longitude"] == 106.70
+    assert detail["kyc_status"] == KycStatus.PENDING.value
+
+
+async def test_get_store_by_owner_id_raises_404_when_no_store(db_session: AsyncSession) -> None:
+    """GET /stores/me: store partner chưa onboarded cửa hàng nào phải trả về 404."""
+    partner = await _create_partner(db_session)
+
+    with pytest.raises(HTTPException) as error:
+        await StoreService(db_session).get_store_by_owner_id(partner.id)
+    assert error.value.status_code == 404
+    assert "Không tìm thấy cửa hàng" in str(error.value.detail)
+
+
 async def test_get_store_by_id_returns_serialized_store(db_session: AsyncSession) -> None:
     """Chi tiết quán phải chứa tọa độ đã giải mã và trạng thái KYC."""
     partner = await _create_partner(db_session)
