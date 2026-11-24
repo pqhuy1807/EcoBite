@@ -1,6 +1,10 @@
 """Integration tests for PostGIS / Spatial Radar Discovery (/api/v1/stores/nearby)."""
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import create_access_token
+from app.models.user import User, UserRole
 
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"
@@ -10,22 +14,37 @@ async def _register_and_login(
     client: AsyncClient,
     email: str,
     role: str,
+    db_session: AsyncSession | None = None,
 ) -> str:
-    password = "StrongPassword123!"
-    await client.post(
-        REGISTER_URL,
-        json={
-            "email": email,
-            "password": password,
-            "full_name": f"User {role}",
-            "role": role,
-        },
+    if role.lower() == "consumer":
+        password = "StrongPassword123!"
+        await client.post(
+            REGISTER_URL,
+            json={
+                "email": email,
+                "password": password,
+                "full_name": f"User {role}",
+            },
+        )
+        resp = await client.post(
+            LOGIN_URL,
+            data={"username": email, "password": password},
+        )
+        return str(resp.json()["access_token"])
+
+    assert db_session is not None, "db_session required for privileged test accounts"
+    role_enum = UserRole(role.lower())
+    user = User(
+        email=email,
+        hashed_password="not-used-by-token",
+        full_name=f"User {role}",
+        role=role_enum,
+        is_active=True,
     )
-    resp = await client.post(
-        LOGIN_URL,
-        data={"username": email, "password": password},
-    )
-    return str(resp.json()["access_token"])
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return create_access_token(user.id)
 
 
 async def _setup_approved_store_with_dish(
@@ -82,10 +101,17 @@ async def _setup_approved_store_with_dish(
     return {"store_id": store_id, "dish_id": str(dish_resp.json()["id"])}
 
 
-async def test_discovery_nearby_stores_success(client: AsyncClient) -> None:
+async def test_discovery_nearby_stores_success(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Tìm kiếm quán lân cận bằng tọa độ GPS trong bán kính 3km."""
-    partner_token = await _register_and_login(client, "partner_disc@ecobite.vn", "store_partner")
-    admin_token = await _register_and_login(client, "admin_disc@ecobite.vn", "admin")
+    partner_token = await _register_and_login(
+        client, "partner_disc@ecobite.vn", "store_partner", db_session=db_session
+    )
+    admin_token = await _register_and_login(
+        client, "admin_disc@ecobite.vn", "admin", db_session=db_session
+    )
 
     # Quán 1: Cách tâm Nguyễn Huệ ~200m (Trong bán kính 3km)
     await _setup_approved_store_with_dish(
@@ -122,10 +148,17 @@ async def test_discovery_nearby_stores_success(client: AsyncClient) -> None:
     assert data["results"][0]["distance_meters"] < 3000
 
 
-async def test_discovery_nearby_stores_with_category_filter(client: AsyncClient) -> None:
+async def test_discovery_nearby_stores_with_category_filter(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Tìm kiếm quán lân cận kết hợp bộ lọc danh mục ẩm thực (RICE vs BAKERY)."""
-    partner_token = await _register_and_login(client, "partner_cat@ecobite.vn", "store_partner")
-    admin_token = await _register_and_login(client, "admin_cat@ecobite.vn", "admin")
+    partner_token = await _register_and_login(
+        client, "partner_cat@ecobite.vn", "store_partner", db_session=db_session
+    )
+    admin_token = await _register_and_login(
+        client, "admin_cat@ecobite.vn", "admin", db_session=db_session
+    )
 
     await _setup_approved_store_with_dish(
         client,
@@ -172,10 +205,17 @@ async def test_discovery_nearby_rejects_unknown_category(client: AsyncClient) ->
     assert response.status_code == 422
 
 
-async def test_discovery_nearby_excludes_sold_out_dish(client: AsyncClient) -> None:
+async def test_discovery_nearby_excludes_sold_out_dish(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Quán hết số suất dư thừa (SOLD_OUT) phải trả về với danh sách dishes rỗng."""
-    partner_token = await _register_and_login(client, "partner_soldout@ecobite.vn", "store_partner")
-    admin_token = await _register_and_login(client, "admin_soldout@ecobite.vn", "admin")
+    partner_token = await _register_and_login(
+        client, "partner_soldout@ecobite.vn", "store_partner", db_session=db_session
+    )
+    admin_token = await _register_and_login(
+        client, "admin_soldout@ecobite.vn", "admin", db_session=db_session
+    )
 
     setup = await _setup_approved_store_with_dish(
         client,

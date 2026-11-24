@@ -1,6 +1,7 @@
 """Integration tests for Store Onboarding and Admin KYC verification endpoints."""
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
 from app.models.user import User, UserRole
@@ -13,27 +14,47 @@ async def _register_and_login(
     client: AsyncClient,
     email: str,
     role: str,
+    db_session: AsyncSession | None = None,
 ) -> str:
-    password = "StrongPassword123!"
-    await client.post(
-        REGISTER_URL,
-        json={
-            "email": email,
-            "password": password,
-            "full_name": f"User {role}",
-            "role": role,
-        },
+    if role.lower() == "consumer":
+        password = "StrongPassword123!"
+        await client.post(
+            REGISTER_URL,
+            json={
+                "email": email,
+                "password": password,
+                "full_name": f"User {role}",
+            },
+        )
+        resp = await client.post(
+            LOGIN_URL,
+            data={"username": email, "password": password},
+        )
+        return str(resp.json()["access_token"])
+
+    assert db_session is not None, "db_session required for privileged test accounts"
+    role_enum = UserRole(role.lower())
+    user = User(
+        email=email,
+        hashed_password="not-used-by-token",
+        full_name=f"User {role}",
+        role=role_enum,
+        is_active=True,
     )
-    resp = await client.post(
-        LOGIN_URL,
-        data={"username": email, "password": password},
-    )
-    return str(resp.json()["access_token"])
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return create_access_token(user.id)
 
 
-async def test_store_onboarding_success(client: AsyncClient) -> None:
+async def test_store_onboarding_success(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Đối tác cửa hàng (STORE_PARTNER) gửi hồ sơ đăng ký KYC thành công."""
-    partner_token = await _register_and_login(client, "partner_kyc@ecobite.vn", "store_partner")
+    partner_token = await _register_and_login(
+        client, "partner_kyc@ecobite.vn", "store_partner", db_session=db_session
+    )
 
     payload = {
         "name": "Tiệm Bánh Mì Sài Gòn",
@@ -68,10 +89,17 @@ async def test_consumer_cannot_onboard_store_returns_403(client: AsyncClient) ->
     assert response.status_code == 403
 
 
-async def test_admin_review_store_kyc(client: AsyncClient) -> None:
+async def test_admin_review_store_kyc(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Admin xem danh sách chờ duyệt và phê duyệt (APPROVED) hồ sơ quán."""
-    partner_token = await _register_and_login(client, "partner_rev@ecobite.vn", "store_partner")
-    admin_token = await _register_and_login(client, "admin_rev@ecobite.vn", "admin")
+    partner_token = await _register_and_login(
+        client, "partner_rev@ecobite.vn", "store_partner", db_session=db_session
+    )
+    admin_token = await _register_and_login(
+        client, "admin_rev@ecobite.vn", "admin", db_session=db_session
+    )
 
     onboard_resp = await client.post(
         "/api/v1/stores/onboard",
@@ -108,9 +136,14 @@ async def test_admin_review_store_kyc(client: AsyncClient) -> None:
     assert detail_resp.json()["kyc_status"] == "APPROVED"
 
 
-async def test_store_onboarding_without_optional_fields_succeeds(client: AsyncClient) -> None:
+async def test_store_onboarding_without_optional_fields_succeeds(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Trường phone / kyc_license_url là tuỳ chọn (khớp nullability của model Store)."""
-    partner_token = await _register_and_login(client, "partner_lite@ecobite.vn", "store_partner")
+    partner_token = await _register_and_login(
+        client, "partner_lite@ecobite.vn", "store_partner", db_session=db_session
+    )
 
     response = await client.post(
         "/api/v1/stores/onboard",
@@ -126,9 +159,14 @@ async def test_store_onboarding_without_optional_fields_succeeds(client: AsyncCl
     assert response.json()["kyc_status"] == "PENDING"
 
 
-async def test_partner_cannot_access_admin_pending_list(client: AsyncClient) -> None:
+async def test_partner_cannot_access_admin_pending_list(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Chỉ ADMIN được phép liệt kê các quán chờ duyệt KYC (Guardrail #2)."""
-    partner_token = await _register_and_login(client, "partner_gate@ecobite.vn", "store_partner")
+    partner_token = await _register_and_login(
+        client, "partner_gate@ecobite.vn", "store_partner", db_session=db_session
+    )
 
     response = await client.get(
         "/api/v1/admin/stores/pending",
@@ -139,10 +177,15 @@ async def test_partner_cannot_access_admin_pending_list(client: AsyncClient) -> 
 
 async def test_admin_review_rejected_records_reason_and_excludes_pending(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     """Từ chối KYC qua schema chuẩn kyc_status/kyc_reject_reason: lưu lý do, rớt khỏi danh chờ."""
-    partner_token = await _register_and_login(client, "partner_rej@ecobite.vn", "store_partner")
-    admin_token = await _register_and_login(client, "admin_rej@ecobite.vn", "admin")
+    partner_token = await _register_and_login(
+        client, "partner_rej@ecobite.vn", "store_partner", db_session=db_session
+    )
+    admin_token = await _register_and_login(
+        client, "admin_rej@ecobite.vn", "admin", db_session=db_session
+    )
 
     onboard_resp = await client.post(
         "/api/v1/stores/onboard",
@@ -175,10 +218,17 @@ async def test_admin_review_rejected_records_reason_and_excludes_pending(
     assert detail.json()["kyc_reject_reason"] == "Giấy phép hết hiệu lực"
 
 
-async def test_admin_review_requires_valid_decision(client: AsyncClient) -> None:
+async def test_admin_review_requires_valid_decision(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
     """Body thiếu decision/kyc_status hợp lệ phải trả về lỗi validate 422."""
-    partner_token = await _register_and_login(client, "partner_bad_rev@ecobite.vn", "store_partner")
-    admin_token = await _register_and_login(client, "admin_bad_rev@ecobite.vn", "admin")
+    partner_token = await _register_and_login(
+        client, "partner_bad_rev@ecobite.vn", "store_partner", db_session=db_session
+    )
+    admin_token = await _register_and_login(
+        client, "admin_bad_rev@ecobite.vn", "admin", db_session=db_session
+    )
 
     onboard_resp = await client.post(
         "/api/v1/stores/onboard",
