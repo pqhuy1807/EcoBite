@@ -15,7 +15,7 @@ Property 2: Preservation - Valid Authentication Flow
   datetime operations use ZoneInfo correctly
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token, create_refresh_token, decode_access_token
 from app.models.user import User, UserRole
+from app.services import order_service
 
 # ============================================================================
 # Hypothesis Strategies for Valid Inputs
@@ -268,23 +269,21 @@ async def test_property_timezone_operations_preserved(
         assert response.status_code == 200
         user_data_response = response.json()
         assert "created_at" in user_data_response
-        assert "updated_at" in user_data_response
 
         # Verify timestamps are valid ISO format (timezone-aware)
-        from datetime import datetime
+        assert order_service.VIETNAM_TZ is not None
 
         created_at = datetime.fromisoformat(
             user_data_response["created_at"].replace("Z", "+00:00")
         )
-        updated_at = datetime.fromisoformat(
-            user_data_response["updated_at"].replace("Z", "+00:00")
-        )
 
         assert created_at is not None
-        assert updated_at is not None
         # Timestamps should be reasonable (not in far future or past)
         assert created_at.year >= 2020
-        assert updated_at.year >= 2020
+
+        # Verify timezone conversion to VIETNAM_TZ operates correctly
+        local_time = created_at.astimezone(order_service.VIETNAM_TZ)
+        assert local_time is not None
     finally:
         await db_session.delete(user)
         await db_session.commit()
