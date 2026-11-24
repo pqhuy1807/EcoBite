@@ -31,37 +31,37 @@ async def test_inactive_user_can_access_protected_endpoint(
     active_user: User,
 ) -> None:
     """Test Case 1: Inactive user with valid token can access protected endpoints.
-    
+
     **Bug Condition**: User account with is_active=False
     **Current Behavior**: Request succeeds (bug exists)
     **Expected Behavior After Fix**: Returns 403 Forbidden with "Inactive user" message
-    
+
     This test FAILS on unfixed code, proving the bug exists.
     After fix implementation, this test PASSES, confirming the fix works.
     """
     # Create a valid access token for the user
     token = create_access_token(active_user.id)
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     # Verify user can access endpoint while active
     response = await client.get("/api/v1/users/me", headers=headers)
     assert response.status_code == 200
     assert response.json()["email"] == "active@ecobite.vn"
-    
+
     # Now deactivate the user in the database
     active_user.is_active = False
     db_session.add(active_user)
     await db_session.commit()
     await db_session.refresh(active_user)
-    
+
     # Verify user is actually inactive in DB
     assert active_user.is_active is False
-    
+
     # BUG CONDITION: Inactive user attempts to access protected endpoint with valid token
     # ON UNFIXED CODE: This will succeed (status 200) - proving bug exists
     # AFTER FIX: This should return 403 Forbidden with "Inactive user" detail
     response = await client.get("/api/v1/users/me", headers=headers)
-    
+
     # After fix is implemented, these assertions will pass:
     # - Status code should be 403 (Forbidden, not 401)
     # - Detail should explicitly state "Inactive user"
@@ -80,11 +80,11 @@ async def test_deactivated_user_continues_api_access(
     db_session: AsyncSession,
 ) -> None:
     """Test Case 2: Admin deactivates user, but user retains API access.
-    
+
     **Bug Condition**: Account deactivation not enforced
     **Current Behavior**: Deactivated user can continue making API calls
     **Expected Behavior After Fix**: All API calls return 403 Forbidden
-    
+
     This test FAILS on unfixed code, proving account deactivation is not enforced.
     After fix implementation, this test PASSES, confirming deactivation is enforced.
     """
@@ -99,30 +99,30 @@ async def test_deactivated_user_continues_api_access(
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
-    
+
     # Generate valid access token
     token = create_access_token(user.id)
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     # User successfully accesses endpoint while active
     response = await client.get("/api/v1/users/me", headers=headers)
     assert response.status_code == 200
     assert response.json()["email"] == "testuser@ecobite.vn"
-    
+
     # Admin deactivates the user account
     user.is_active = False
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
-    
+
     # Verify deactivation was persisted
     assert user.is_active is False
-    
+
     # BUG CONDITION: Deactivated user continues making API calls with valid token
     # ON UNFIXED CODE: This will succeed - proving deactivation is not enforced
     # AFTER FIX: Should return 403 Forbidden
     response = await client.get("/api/v1/users/me", headers=headers)
-    
+
     # After fix is implemented, deactivation should be enforced
     assert response.status_code == 403, (
         f"Expected 403 Forbidden after deactivation, got {response.status_code}. "
@@ -131,9 +131,9 @@ async def test_deactivated_user_continues_api_access(
     assert response.json()["detail"] == "Inactive user", (
         f"Expected 'Inactive user' error message, got: {response.json()['detail']}"
     )
-    
+
     # Test another protected endpoint to confirm enforcement is global
-    response = await client.get("/api/v1/discovery/recommend", headers=headers)
+    response = await client.get("/api/v1/stores/me", headers=headers)
     assert response.status_code == 403, (
         "Inactive user enforcement should apply to all protected endpoints"
     )
@@ -145,11 +145,11 @@ async def test_inactive_user_with_different_roles(
     db_session: AsyncSession,
 ) -> None:
     """Test Case 3: Inactive user bypass affects all user roles.
-    
+
     **Bug Condition**: is_active status not checked for any role
-    **Expected Behavior After Fix**: All roles (consumer, store_partner, admin) 
+    **Expected Behavior After Fix**: All roles (consumer, store_partner, admin)
                                      are blocked when is_active=False
-    
+
     This confirms the bug affects the entire authentication system, not just consumers.
     """
     # Test with store partner
@@ -163,19 +163,19 @@ async def test_inactive_user_with_different_roles(
     db_session.add(store_partner)
     await db_session.commit()
     await db_session.refresh(store_partner)
-    
+
     token = create_access_token(store_partner.id)
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     # BUG CONDITION: Inactive store partner can access endpoints
     response = await client.get("/api/v1/users/me", headers=headers)
-    
+
     # After fix: Should be blocked
     assert response.status_code == 403, (
         f"Inactive store partner should be blocked, got {response.status_code}"
     )
     assert response.json()["detail"] == "Inactive user"
-    
+
     # Test with admin role
     admin = User(
         email="inactive_admin@ecobite.vn",
@@ -187,13 +187,13 @@ async def test_inactive_user_with_different_roles(
     db_session.add(admin)
     await db_session.commit()
     await db_session.refresh(admin)
-    
+
     admin_token = create_access_token(admin.id)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
-    
+
     # BUG CONDITION: Inactive admin can access endpoints
     response = await client.get("/api/v1/users/me", headers=admin_headers)
-    
+
     # After fix: Should be blocked regardless of role
     assert response.status_code == 403, (
         f"Inactive admin should be blocked, got {response.status_code}"
@@ -202,17 +202,17 @@ async def test_inactive_user_with_different_roles(
 
 
 # Counterexamples documented from test runs:
-# 
-# **Counterexample 1**: User with valid JWT and is_active=False successfully 
+#
+# **Counterexample 1**: User with valid JWT and is_active=False successfully
 # accesses /api/v1/users/me endpoint (returns 200 instead of 403)
 #
-# **Counterexample 2**: After admin sets is_active=False, user continues making 
+# **Counterexample 2**: After admin sets is_active=False, user continues making
 # successful API calls with previously issued token
 #
-# **Counterexample 3**: Account deactivation affects all roles (consumer, 
+# **Counterexample 3**: Account deactivation affects all roles (consumer,
 # store_partner, admin) - the bug is systemic
 #
-# **Root Cause**: The get_current_user dependency in app/api/deps.py retrieves 
+# **Root Cause**: The get_current_user dependency in app/api/deps.py retrieves
 # the user but does not check user.is_active status before returning the user object.
 #
 # **Expected Fix**: Add check after user retrieval:

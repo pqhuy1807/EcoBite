@@ -15,7 +15,7 @@ Property 1: Bug Condition - Runtime Timezone Crash
 """
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from zoneinfo import ZoneInfoNotFoundError
 
 import pytest
@@ -66,10 +66,13 @@ class TestTimezoneBugExploration:
                 "No time zone found with key Asia/Ho_Chi_Minh"
             )
 
-            # On UNFIXED code: Import will fail
-            # On FIXED code: Import will succeed using fallback
-            with pytest.raises(ZoneInfoNotFoundError):
-                import app.services.order_service  # noqa: F401
+            # On FIXED code: Import succeeds using fallback timezone(timedelta(hours=7))
+            import app.services.order_service
+
+            assert app.services.order_service.VIETNAM_TZ is not None
+            from datetime import timedelta, timezone
+
+            assert app.services.order_service.VIETNAM_TZ == timezone(timedelta(hours=7))
 
     def test_vietnam_tz_initialization_failure(self) -> None:
         """Test: VIETNAM_TZ constant fails to initialize without timezone database.
@@ -178,9 +181,13 @@ class TestTimezoneBugCounterexamples:
                 "No time zone found with key Asia/Ho_Chi_Minh"
             )
 
-            with pytest.raises(ZoneInfoNotFoundError):
-                # Test suite cannot even import the module
-                import app.services.order_service  # noqa: F401
+            # On FIXED code: Module imports successfully with fallback GMT+7
+            import app.services.order_service
+
+            assert app.services.order_service.VIETNAM_TZ is not None
+            from datetime import timedelta, timezone
+
+            assert app.services.order_service.VIETNAM_TZ == timezone(timedelta(hours=7))
 
 
 # Summary of Documented Counterexamples:

@@ -235,18 +235,18 @@ async def test_order_placement_concurrency_benchmark(tmp_path: Path) -> None:
 
     # 6. Assertions theo đúng yêu cầu đề bài
     assert other_codes == [], f"Unexpected status codes: {other_codes}"
-    assert (
-        success_count == initial_stock
-    ), f"Expected exactly {initial_stock} successful orders, got {success_count}"
-    assert conflict_count == (
-        total_requests - initial_stock
-    ), f"Expected exactly {total_requests - initial_stock} 409 conflicts, got {conflict_count}"
-    assert (
-        final_dish.remaining_quantity == 0
-    ), f"Remaining quantity must be 0, got {final_dish.remaining_quantity}"
-    assert (
-        final_dish.status == DishStatus.SOLD_OUT
-    ), f"Dish status must be SOLD_OUT, got {final_dish.status}"
-    assert (
-        orders_in_db == initial_stock
-    ), f"Orders in database must be exactly {initial_stock}, got {orders_in_db}"
+    assert success_count == initial_stock, (
+        f"Expected exactly {initial_stock} successful orders, got {success_count}"
+    )
+    assert conflict_count == (total_requests - initial_stock), (
+        f"Expected exactly {total_requests - initial_stock} 409 conflicts, got {conflict_count}"
+    )
+    assert final_dish.remaining_quantity == 0, (
+        f"Remaining quantity must be 0, got {final_dish.remaining_quantity}"
+    )
+    assert final_dish.status == DishStatus.SOLD_OUT, (
+        f"Dish status must be SOLD_OUT, got {final_dish.status}"
+    )
+    assert orders_in_db == initial_stock, (
+        f"Orders in database must be exactly {initial_stock}, got {orders_in_db}"
+    )

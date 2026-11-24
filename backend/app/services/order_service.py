@@ -17,11 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import distributed_lock
 from app.models.dish import Dish, DishStatus
-from app.models.gamification import GreenPointsLedger, PointActionType
+from app.models.gamification import PointActionType
 from app.models.order import Order, OrderStatus, PaymentMethod, PaymentStatus
-from app.models.store import Store
 from app.models.user import User, UserRole
-from app.repositories import dish_repo
+from app.repositories import dish_repo, store_repo
+from app.repositories.gamification_repo import GamificationRepository
 from app.repositories.order_repo import OrderRepository
 from app.repositories.qr_token_repo import QRTokenRepository
 from app.schemas.order import (
@@ -84,6 +84,7 @@ class OrderService:
         self.db = db
         self.orders = OrderRepository(db)
         self.qr_tokens = QRTokenRepository(db)
+        self.gamification_repo = GamificationRepository(db)
 
     async def create_rescue_order(
         self,
@@ -545,10 +546,10 @@ class OrderService:
                     completed_order.payment_status = PaymentStatus.PAID
 
                 # 8. Award green points to consumer & record in GreenPointsLedger
-                consumer = await self.db.get(User, completed_order.consumer_id)
+                consumer = await self.gamification_repo.get_user_by_id(completed_order.consumer_id)
                 if consumer is not None:
                     consumer.green_points_balance += completed_order.green_points_earned
-                    ledger_entry = GreenPointsLedger(
+                    await self.gamification_repo.create_ledger_entry(
                         user_id=consumer.id,
                         order_id=completed_order.id,
                         points_change=completed_order.green_points_earned,
@@ -556,11 +557,11 @@ class OrderService:
                         action_type=PointActionType.ORDER_RESCUE,
                         co2_saved_kg=completed_order.co2_saved_kg,
                         note=f"Giải cứu đơn hàng {completed_order.order_code}",
+                        commit=False,
                     )
-                    self.db.add(ledger_entry)
 
                 # 9. Accumulate store's total CO2 saved
-                store = await self.db.get(Store, completed_order.store_id)
+                store = await store_repo.get_store_by_id(self.db, completed_order.store_id)
                 if store is not None:
                     store.total_co2_saved_kg = (
                         store.total_co2_saved_kg or Decimal("0.0")

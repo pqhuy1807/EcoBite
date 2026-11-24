@@ -29,23 +29,23 @@ class TestTokenTypeConfusionBugExploration:
         active_user: User,
     ) -> None:
         """Test Case 1: Refresh token can be used as access token on protected endpoint.
-        
+
         Bug Condition: When a refresh token (type="refresh") is used as Bearer token,
         the system SHOULD reject it with 401, but currently ACCEPTS it.
-        
+
         This test encodes the EXPECTED behavior (rejection).
         On unfixed code, it will FAIL because refresh tokens currently work as access tokens.
         After fix, it will PASS when refresh tokens are properly rejected.
         """
         # Create a REFRESH token for the user (type="refresh")
         refresh_token = security.create_refresh_token(subject=str(active_user.id))
-        
+
         # Attempt to use the REFRESH token as a Bearer token on a protected endpoint
         response = await client.get(
             "/api/v1/users/me",
             headers={"Authorization": f"Bearer {refresh_token}"},
         )
-        
+
         # EXPECTED behavior (after fix): Should return 401 Unauthorized
         # CURRENT behavior (bug): Returns 200 OK
         # This assertion will FAIL on unfixed code, confirming the bug exists
@@ -64,19 +64,20 @@ class TestTokenTypeConfusionBugExploration:
         active_user: User,
     ) -> None:
         """Test Case 2: Token with invalid type claim is accepted.
-        
+
         Bug Condition: When a JWT with type="invalid" is used,
         the system SHOULD reject it with 401, but currently ACCEPTS it.
-        
+
         This test encodes the EXPECTED behavior (rejection).
         On unfixed code, it will FAIL because invalid token types are accepted.
         After fix, it will PASS when invalid token types are properly rejected.
         """
         from datetime import UTC, datetime, timedelta
+
         from jose import jwt
-        
+
         from app.core.config import settings
-        
+
         # Manually craft a JWT with an INVALID type claim
         now = datetime.now(UTC)
         expire = now + timedelta(minutes=30)
@@ -87,13 +88,13 @@ class TestTokenTypeConfusionBugExploration:
             "type": "invalid",  # Invalid token type
         }
         invalid_token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-        
+
         # Attempt to authenticate with the invalid token
         response = await client.get(
             "/api/v1/users/me",
             headers={"Authorization": f"Bearer {invalid_token}"},
         )
-        
+
         # EXPECTED behavior (after fix): Should return 401 Unauthorized
         # CURRENT behavior (bug): Returns 200 OK if signature is valid
         # This assertion will FAIL on unfixed code, confirming the bug exists
@@ -112,19 +113,20 @@ class TestTokenTypeConfusionBugExploration:
         active_user: User,
     ) -> None:
         """Test Case 3: Token without type claim is accepted.
-        
+
         Bug Condition: When a JWT has no "type" claim at all,
         the system SHOULD reject it with 401, but currently ACCEPTS it.
-        
+
         This test encodes the EXPECTED behavior (rejection).
         On unfixed code, it will FAIL because tokens without type claims are accepted.
         After fix, it will PASS when tokens without type claims are properly rejected.
         """
         from datetime import UTC, datetime, timedelta
+
         from jose import jwt
-        
+
         from app.core.config import settings
-        
+
         # Manually craft a JWT WITHOUT a type claim
         now = datetime.now(UTC)
         expire = now + timedelta(minutes=30)
@@ -135,13 +137,13 @@ class TestTokenTypeConfusionBugExploration:
             # No "type" claim
         }
         no_type_token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-        
+
         # Attempt to authenticate with the token lacking type claim
         response = await client.get(
             "/api/v1/users/me",
             headers={"Authorization": f"Bearer {no_type_token}"},
         )
-        
+
         # EXPECTED behavior (after fix): Should return 401 Unauthorized
         # CURRENT behavior (bug): Returns 200 OK if signature is valid
         # This assertion will FAIL on unfixed code, confirming the bug exists
