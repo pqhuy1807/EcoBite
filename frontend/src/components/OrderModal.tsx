@@ -2,8 +2,12 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { RescueDishItem } from './DishCard';
+import { extractApiErrorMessage } from '@/lib/api-client';
 import { orderService } from '@/services/order.service';
+import { paymentService } from '@/services/payment.service';
+import type { PaymentMethod } from '@/types/api';
 
 interface OrderModalProps {
     dish: RescueDishItem | null;
@@ -12,9 +16,12 @@ interface OrderModalProps {
 }
 
 interface CreatedOrderSummary {
+    order_id?: string;
     order_code: string;
     co2_saved_kg: number;
     green_points: number;
+    payment_method: PaymentMethod;
+    vnpay_warning?: string;
 }
 
 export function OrderModal({
@@ -23,8 +30,10 @@ export function OrderModal({
     onOrderSuccess,
 }: OrderModalProps) {
     const [quantity, setQuantity] = useState(1);
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isOutOfStockError, setIsOutOfStockError] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [createdOrder, setCreatedOrder] =
         useState<CreatedOrderSummary | null>(null);
 
@@ -45,35 +54,63 @@ export function OrderModal({
         }
 
         setIsSubmitting(true);
+        setErrorMessage(null);
         try {
             const res = await orderService.createRescueOrder({
                 dish_id: dish.id,
                 quantity,
+                payment_method: paymentMethod,
             });
-            const raw = res as unknown as Record<string, unknown>;
-            setCreatedOrder({
-                order_code: String(
-                    raw.order_code ??
-                    `EB-20261114-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
-                ),
-                co2_saved_kg: Number(raw.co2_saved_kg ?? co2Saved),
-                green_points: Number(
-                    raw.green_points ?? raw.green_points_earned ?? greenPoints
-                ),
-            });
+
             onOrderSuccess?.(dish.id, quantity);
+
+            if (paymentMethod === 'VNPAY' && res.id) {
+                try {
+                    const vnpay = await paymentService.createVnpayUrl(res.id);
+                    window.location.href = vnpay.payment_url;
+                    return;
+                } catch (vnpayErr: unknown) {
+                    setCreatedOrder({
+                        order_id: res.id,
+                        order_code: res.order_code,
+                        co2_saved_kg: Number(res.co2_saved_kg ?? co2Saved),
+                        green_points: Number(res.green_points_earned ?? greenPoints),
+                        payment_method: paymentMethod,
+                        vnpay_warning: extractApiErrorMessage(
+                            vnpayErr,
+                            'Đơn hàng đã được tạo nhưng chưa mở được cổng VNPay. Bạn có thể bấm Thanh toán VNPay tại mục Đơn của tôi.'
+                        ),
+                    });
+                    return;
+                }
+            }
+
+            setCreatedOrder({
+                order_id: res.id,
+                order_code: res.order_code,
+                co2_saved_kg: Number(res.co2_saved_kg ?? co2Saved),
+                green_points: Number(res.green_points_earned ?? greenPoints),
+                payment_method: paymentMethod,
+            });
         } catch (err: unknown) {
             const status = (err as { response?: { status?: number } })?.response
                 ?.status;
             if (status === 409) {
                 setIsOutOfStockError(true);
+            } else if (status === 401 || status === 403) {
+                setErrorMessage(
+                    extractApiErrorMessage(
+                        err,
+                        'Vui lòng đăng nhập bằng tài khoản Người giải cứu (CONSUMER) để đặt đơn.'
+                    )
+                );
             } else {
-                setCreatedOrder({
-                    order_code: `EB-20261114-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-                    co2_saved_kg: co2Saved,
-                    green_points: greenPoints,
-                });
-                onOrderSuccess?.(dish.id, quantity);
+                setErrorMessage(
+                    extractApiErrorMessage(
+                        err,
+                        'Không thể tạo đơn hàng lúc này. Vui lòng kiểm tra kết nối máy chủ.'
+                    )
+                );
             }
         } finally {
             setIsSubmitting(false);
@@ -107,6 +144,10 @@ export function OrderModal({
     }
 
     if (createdOrder) {
+        const orderUrl = createdOrder.order_id
+            ? `/orders?highlight=${createdOrder.order_id}`
+            : '/orders';
+
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                 <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-2xl">
@@ -117,7 +158,8 @@ export function OrderModal({
                         Đặt đơn giải cứu thành công!
                     </h3>
                     <p className="mt-2 text-xs text-gray-500">
-                        Vui lòng đưa mã đơn dưới đây khi đến nhận món tại {dish.storeName}
+                        Vui lòng xuất trình mã QR của đơn hàng dưới đây khi đến nhận món tại{' '}
+                        {dish.storeName}
                     </p>
 
                     <div className="my-5 rounded-xl border border-dashed border-[#10B981] bg-[#F4FBF7] p-4">
@@ -127,18 +169,33 @@ export function OrderModal({
                         </span>
                     </div>
 
+                    {createdOrder.vnpay_warning && (
+                        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                            {createdOrder.vnpay_warning}
+                        </div>
+                    )}
+
                     <div className="mb-6 rounded-xl bg-[#E6F7F0] p-3 text-xs font-semibold text-[#0F8A5F]">
-                        🌱 Bạn đã giúp Trái Đất giảm {createdOrder.co2_saved_kg} kg CO₂e và
-                        nhận +{createdOrder.green_points} Green Points!
+                        🌱 Bạn sẽ giúp Trái Đất giảm {createdOrder.co2_saved_kg} kg CO₂e và
+                        nhận +{createdOrder.green_points} Green Points khi hoàn tất nhận món!
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="w-full rounded-xl bg-[#10B981] py-3 text-sm font-semibold text-white transition hover:bg-[#0D9668]"
-                    >
-                        Hoàn tất
-                    </button>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                            Đóng
+                        </button>
+                        <Link
+                            href={orderUrl}
+                            onClick={onClose}
+                            className="rounded-xl bg-[#10B981] py-3 text-center text-sm font-semibold text-white transition hover:bg-[#0D9668]"
+                        >
+                            Xem đơn &amp; Mã QR
+                        </Link>
+                    </div>
                 </div>
             </div>
         );
@@ -205,6 +262,42 @@ export function OrderModal({
                     </div>
                 </div>
 
+                <div className="mt-4">
+                    <span className="mb-2 block text-xs font-medium text-gray-700">
+                        Phương thức thanh toán
+                    </span>
+                    <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                            type="button"
+                            onClick={() => setPaymentMethod('COD')}
+                            className={`rounded-xl border px-3 py-2.5 text-left text-xs transition ${paymentMethod === 'COD'
+                                    ? 'border-[#10B981] bg-[#E6F7F0] font-semibold text-[#0F8A5F]'
+                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                }`}
+                        >
+                            <span className="block font-bold">Tiền mặt (COD)</span>
+                            <span className="text-[11px] opacity-80">Trả trực tiếp tại quán</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPaymentMethod('VNPAY')}
+                            className={`rounded-xl border px-3 py-2.5 text-left text-xs transition ${paymentMethod === 'VNPAY'
+                                    ? 'border-blue-600 bg-blue-50 font-semibold text-blue-800'
+                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                }`}
+                        >
+                            <span className="block font-bold">VNPay Sandbox</span>
+                            <span className="text-[11px] opacity-80">Thanh toán trực tuyến</span>
+                        </button>
+                    </div>
+                </div>
+
+                {errorMessage && (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                        {errorMessage}
+                    </div>
+                )}
+
                 <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-[#E6F7F0] p-3 text-xs text-[#0F8A5F]">
                     <span className="text-base">🌱</span>
                     <span>
@@ -233,10 +326,14 @@ export function OrderModal({
                     <button
                         type="button"
                         disabled={isSubmitting}
-                        onClick={handleConfirmOrder}
+                        onClick={() => void handleConfirmOrder()}
                         className="col-span-2 rounded-xl bg-[#10B981] py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#0D9668] disabled:opacity-50"
                     >
-                        {isSubmitting ? 'Đang xử lý...' : 'Xác nhận cứu món'}
+                        {isSubmitting
+                            ? 'Đang xử lý...'
+                            : paymentMethod === 'VNPAY'
+                                ? 'Đặt & Thanh toán VNPay'
+                                : 'Xác nhận cứu món'}
                     </button>
                 </div>
             </div>

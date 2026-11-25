@@ -7,6 +7,7 @@ import {
     Check,
     Clock,
     Copy,
+    CreditCard,
     Leaf,
     MapPin,
     QrCode,
@@ -25,7 +26,8 @@ import { Toast } from '@/components/ui/Toast';
 import { extractApiErrorMessage } from '@/lib/api-client';
 import { formatDateTime, formatVND } from '@/lib/utils';
 import { orderService } from '@/services/order.service';
-import type { OrderResponse, OrderStatus, QRPayloadResponse } from '@/types/api';
+import { paymentService } from '@/services/payment.service';
+import type { OrderResponse, OrderStatus, PaymentStatus, QRPayloadResponse } from '@/types/api';
 
 const CONSUMER_ROLES = ['CONSUMER', 'ADMIN'];
 
@@ -57,15 +59,31 @@ function getStatusBadge(status: OrderStatus): {
     }
 }
 
+function getPaymentBadgeVariant(
+    status: PaymentStatus
+): 'success' | 'warning' | 'danger' | 'neutral' {
+    switch (status) {
+        case 'PAID':
+            return 'success';
+        case 'PENDING':
+            return 'warning';
+        case 'FAILED':
+            return 'danger';
+        default:
+            return 'neutral';
+    }
+}
+
 export default function MyOrdersPage() {
     const queryClient = useQueryClient();
     const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
     const [qrData, setQrData] = useState<QRPayloadResponse | null>(null);
     const [qrOrder, setQrOrder] = useState<OrderResponse | null>(null);
     const [copied, setCopied] = useState(false);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(
-        null
-    );
+    const [toast, setToast] = useState<{
+        message: string;
+        type: 'success' | 'error' | 'info';
+    } | null>(null);
 
     const {
         data: orders = [],
@@ -89,6 +107,26 @@ export default function MyOrdersPage() {
         onError: (err) => {
             setToast({
                 message: extractApiErrorMessage(err, 'Không thể cấp mã QR cho đơn hàng này.'),
+                type: 'error',
+            });
+        },
+    });
+
+    const vnpayMutation = useMutation({
+        mutationFn: (orderId: string) => paymentService.createVnpayUrl(orderId),
+        onSuccess: (res) => {
+            setToast({
+                message: 'Đang chuyển hướng sang cổng thanh toán VNPay...',
+                type: 'info',
+            });
+            window.location.href = res.payment_url;
+        },
+        onError: (err) => {
+            setToast({
+                message: extractApiErrorMessage(
+                    err,
+                    'Không thể tạo liên kết thanh toán VNPay cho đơn hàng này.'
+                ),
                 type: 'error',
             });
         },
@@ -119,7 +157,11 @@ export default function MyOrdersPage() {
         const highlightId = params.get('highlight');
         if (!highlightId) return;
         const matched = orders.find((o) => o.id === highlightId);
-        if (matched && (matched.status === 'CONFIRMED' || matched.status === 'READY_FOR_PICKUP')) {
+        if (
+            matched &&
+            (matched.status === 'CONFIRMED' || matched.status === 'READY_FOR_PICKUP') &&
+            (matched.payment_method === 'COD' || matched.payment_status === 'PAID')
+        ) {
             issueQrMutation.mutate(matched);
             window.history.replaceState({}, '', '/orders');
         }
@@ -151,7 +193,7 @@ export default function MyOrdersPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Đơn giải cứu của tôi</h1>
                         <p className="mt-1 text-sm text-gray-500">
-                            Xuất trình mã QR động HMAC-SHA256 tại quầy cửa hàng để hoàn tất nhận món.
+                            Thanh toán trực tuyến VNPay hoặc xuất trình mã QR động HMAC-SHA256 tại quầy cửa hàng.
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -181,11 +223,10 @@ export default function MyOrdersPage() {
                             key={tab.key}
                             type="button"
                             onClick={() => setStatusFilter(tab.key)}
-                            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-                                statusFilter === tab.key
+                            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${statusFilter === tab.key
                                     ? 'bg-emerald-600 text-white'
                                     : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                            }`}
+                                }`}
                         >
                             {tab.label}
                         </button>
@@ -223,6 +264,10 @@ export default function MyOrdersPage() {
                         const badge = getStatusBadge(order.status);
                         const canAct =
                             order.status === 'CONFIRMED' || order.status === 'READY_FOR_PICKUP';
+                        const canPayVnpay =
+                            canAct &&
+                            order.payment_method === 'VNPAY' &&
+                            order.payment_status === 'PENDING';
 
                         return (
                             <Card key={order.id} className="p-5">
@@ -233,7 +278,7 @@ export default function MyOrdersPage() {
                                                 {order.dish_name ?? 'Suất ăn giải cứu'}
                                             </h2>
                                             <Badge variant={badge.variant}>{badge.label}</Badge>
-                                            <Badge variant="neutral">
+                                            <Badge variant={getPaymentBadgeVariant(order.payment_status)}>
                                                 {order.payment_method} • {order.payment_status}
                                             </Badge>
                                         </div>
@@ -277,9 +322,25 @@ export default function MyOrdersPage() {
 
                                     {canAct && (
                                         <div className="flex flex-wrap items-center gap-2">
+                                            {canPayVnpay && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    className="bg-blue-600 text-white hover:bg-blue-700"
+                                                    onClick={() => vnpayMutation.mutate(order.id)}
+                                                    isLoading={
+                                                        vnpayMutation.isPending &&
+                                                        vnpayMutation.variables === order.id
+                                                    }
+                                                >
+                                                    <CreditCard className="h-4 w-4" />
+                                                    Thanh toán VNPay
+                                                </Button>
+                                            )}
                                             <Button
                                                 type="button"
                                                 size="sm"
+                                                variant={canPayVnpay ? 'outline' : 'primary'}
                                                 onClick={() => issueQrMutation.mutate(order)}
                                                 isLoading={
                                                     issueQrMutation.isPending &&
