@@ -373,3 +373,23 @@ export interface VoucherRedeemResponse {
     remaining_balance: number;
     claimed_at: string;
 }
+
+export interface ReviewCreatePayload {
+    rating: number;
+    comment?: string | null;
+    tags?: string[];
+    photo_urls?: string[];
+}
+
+export interface ReviewResponse {
+    id: string;
+    order_id: string;
+    consumer_id: string;
+    store_id: string;
+    dish_id: string;
+    rating: number;
+    comment?: string | null;
+    tags: string[];
+    photo_urls: string[];
+    created_at: string;
+}
