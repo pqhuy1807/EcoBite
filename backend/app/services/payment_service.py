@@ -10,9 +10,10 @@ import hmac
 import logging
 import urllib.parse
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,8 +25,7 @@ from app.repositories import dish_repo, order_repo, payment_repo
 
 logger = logging.getLogger(__name__)
 
-# VNPay API v2.1.0 endpoints
-_VNPAY_BASE_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+# VNPay API v2.1.0 endpoint. Override via settings.VNP_URL (sandbox by default).
 
 
 class PaymentService:
@@ -101,13 +101,19 @@ class PaymentService:
             )
 
         # 5. Build VNPay payment request parameters
-        now_vietnam = datetime.now(UTC).astimezone()
+        # Vietnam local time (Asia/Ho_Chi_Minh, UTC+7) with safe fallback.
+        try:
+            vietnam_tz: tzinfo = ZoneInfo("Asia/Ho_Chi_Minh")
+        except ZoneInfoNotFoundError:
+            # tzdata unavailable: fall back to fixed UTC+7 offset.
+            vietnam_tz = timezone(timedelta(hours=7))
+        now_vietnam = datetime.now(vietnam_tz)
         txn_ref = order.order_code
 
         # Amount in VND cents
         vnp_amount = int(order.total_amount * 100)
 
-        # VNPay requires date/time in format: YYYYMMDDHHMMSS
+        # VNPay requires date/time in format: YYYYMMDDHHMMSS (Hà Nội, UTC+7)
         vnp_create_date = now_vietnam.strftime("%Y%m%d%H%M%S")
 
         # Build parameter dict
@@ -133,7 +139,7 @@ class PaymentService:
         vnp_params["vnp_SecureHash"] = vnp_secure_hash
 
         # 7. Build final payment URL
-        payment_url = f"{_VNPAY_BASE_URL}?{urllib.parse.urlencode(vnp_params)}"
+        payment_url = f"{settings.VNP_URL}?{urllib.parse.urlencode(vnp_params)}"
 
         return {
             "payment_url": payment_url,
@@ -154,8 +160,15 @@ class PaymentService:
         # Sort keys alphabetically
         sorted_params = dict(sorted(params.items()))
 
-        # Build query string without vnp_SecureHash
-        hash_data = "&".join(f"{key}={value}" for key, value in sorted_params.items() if value)
+        # Build query string without vnp_SecureHash.
+        # VNPay requires each value to be URL-encoded (quote_plus) before signing,
+        # and verification must use the exact same encoding to stay consistent
+        # with both request generation and IPN/return verification.
+        hash_data = "&".join(
+            f"{key}={urllib.parse.quote_plus(str(value))}"
+            for key, value in sorted_params.items()
+            if value
+        )
 
         # Generate HMAC-SHA512
         secret_key = settings.VNP_HASH_SECRET
