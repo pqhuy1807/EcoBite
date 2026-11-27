@@ -2,15 +2,12 @@
 
 import urllib.parse
 import uuid
-from decimal import Decimal
 from unittest.mock import patch
 
-import pytest
 from httpx import AsyncClient
 
 from app.core.config import settings
-from app.models.order import OrderStatus, PaymentMethod, PaymentStatus
-from app.models.user import User, UserRole
+from app.models.order import PaymentMethod, PaymentStatus
 from app.services.payment_service import PaymentService
 
 ALL_DAY_WINDOW = {"pickup_start_time": "00:00:00", "pickup_end_time": "23:59:00"}
