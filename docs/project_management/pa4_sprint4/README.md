@@ -12,6 +12,8 @@ Thư mục này là trung tâm điều phối công việc, phân công 1-1 và 
 | [`02_Week5_Detailed_Action_Plan.md`](./02_Week5_Detailed_Action_Plan.md) | Kế hoạch tác chiến chi tiết từng ngày cho **Tuần 5 (`16/11 – 22/11/2026`)**. | Cả nhóm / Theo dõi hàng ngày |
 | [`03_Task_Assignment_Jira_Backlog.md`](./03_Task_Assignment_Jira_Backlog.md) | Bảng giao việc chi tiết chuẩn **Jira 1-1 Assignee Rule** (Epic → Task ID, Assignee, Story Points, File mục tiêu, Tiêu chí nghiệm thu DoD). | PM & Domain Leads / Cập nhật khi phát sinh task |
 | [`04_Sprint4_Progress_Tracker.md`](./04_Sprint4_Progress_Tracker.md) | Bảng theo dõi tiến độ theo tính năng, Burn-down Story Points, Daily Scrum & Blocker Log, biên bản họp Sprint và Quality Gate Checklist (dùng trích xuất sang `docs/PA4.md`). | Cả nhóm / Cập nhật mỗi ngày & sau PR merge |
+| [`05_Week5_Remaining_Tasks_and_Fix_Plan.md`](./05_Week5_Remaining_Tasks_and_Fix_Plan.md) | Danh sách đối chiếu các đầu việc và lỗi còn sót của Tuần 5 (`EC4-01` → `EC4-12`) tại thời điểm kiểm kê `23/11`. | Cả nhóm / Tham chiếu |
+| [`06_Week6_Detailed_Action_Plan.md`](./06_Week6_Detailed_Action_Plan.md) | Kế hoạch tác chiến **Tuần 6 (`25/11 – 29/11/2026`)**: 2 cụm song song (**Thịnh + Tony** đóng 100% FE & QA PA4 → chuẩn bị PA5; **Huy + Phúc** dựng Baseline chạy được + nghiên cứu & khung đánh giá cho AI-1 & AI-2). | Cả nhóm / Theo dõi hàng ngày |
 
 ## Quy ước Làm việc Nhanh (theo `AGENTS.md` & `05_Agile_Roadmap_and_Kanban.md`)
 
