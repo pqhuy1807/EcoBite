@@ -60,12 +60,12 @@ export default function GreenPointsPage() {
 
     const catalogQuery = useQuery({
         queryKey: ['vouchers-catalog'],
-        queryFn: () => gamificationService.listAvailableVouchers(),
+        queryFn: () => gamificationService.listVouchers(),
     });
 
     const myVouchersQuery = useQuery({
         queryKey: ['my-vouchers'],
-        queryFn: () => gamificationService.listMyVouchers(0, 50),
+        queryFn: () => gamificationService.getMyVouchers(0, 50),
     });
 
     const redeemMutation = useMutation({
