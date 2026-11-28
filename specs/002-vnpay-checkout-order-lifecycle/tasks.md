@@ -87,10 +87,10 @@
 
 ### Frontend Gates (`frontend/`) — Executed on `main` (`2026-11-28`, no TS/TSX edits since)
 
-- [X] T016 `npm test` (`vitest run`) — **PASS (`exit 0`)**: workspace suite passed (`6` files / `17` tests), including `SCRUM-42` suites `__tests__/components/OrderModal.test.tsx` (`3` tests) and `__tests__/services/payment.service.test.ts` (`2` tests)
+- [X] T016 `npm test` (`vitest run`) — **PASS (`exit 0`)**: workspace suite passed (`9` files / `35` tests), including `SCRUM-42` suites `__tests__/components/OrderModal.test.tsx` (`3` tests), `__tests__/components/OrdersPage.test.tsx` (`3` tests), and `__tests__/services/payment.service.test.ts` (`2` tests)
 - [X] T017 `npm run lint` (`next lint`) — **PASS (`exit 0`)**: `0` ESLint warnings or errors
 - [X] T018 `npm run type-check` (`tsc --noEmit`) — **PASS (`exit 0`)**: `0` TypeScript errors
-- [X] T019 `npm run build` (`next build`) — **PASS (`exit 0`)**: `14/14` production routes compiled cleanly (including `/orders`, `/payment/vnpay-return`, `/store/verify-qr`)
+- [X] T019 `npm run build` (`next build`) — **PASS (`exit 0`)**: `15/15` static pages compiled cleanly (including `/orders`, `/orders/vnpay-return`, `/payment/vnpay-return`, `/store/verify-qr`)
 
 ### Backend Gates (`backend/`) — Observed Checks & Local `.venv` Checklist
 

@@ -8,7 +8,7 @@ description: "Dependency-ordered TDD task list for EcoBite Feature 003 — Auth,
 
 **Prerequisites**: `plan.md` (required), `spec.md` (required), `research.md`, `data-model.md`, `contracts/api-contracts.md`, `quickstart.md`
 
-**Tests**: Test tasks are **MANDATORY** and listed **FIRST** inside every User Story phase per EcoBite Constitution Principle I (Test-First Development — Red-Green-Refactor). Checkbox status (`[X]` vs `[ ]`) reflects verified ground-truth repository state as of `2026-11-28` (`33 [X]` done / `8 [ ]` remaining = `41` total tasks).
+**Tests**: Test tasks are **MANDATORY** and listed **FIRST** inside every User Story phase per EcoBite Constitution Principle I (Test-First Development — Red-Green-Refactor). Checkbox status (`[X]` vs `[ ]`) reflects verified ground-truth repository state as of `2026-11-28` (`34 [X]` done / `7 [ ]` remaining = `41` total tasks).
 
 **Organization**: Tasks are grouped by User Story (`US1`–`US5`) with Sprint 4 Assignee (`Phúc`, `Tony`, `Thịnh`) and Jira ID (`EC4-02`, `EC4-05`, `EC4-10`, `EC4-11`, `EC4-13`, `EC4-14`) traceability.
 
@@ -26,7 +26,7 @@ description: "Dependency-ordered TDD task list for EcoBite Feature 003 — Auth,
 
 - [X] T001 (Tony | EC4-05) Sync backend virtual environment with `backend/requirements.txt` (`bcrypt==4.0.1`, `tzdata>=2024.1`, `redis==5.0.6`, `httpx==0.28.1`, `hypothesis==6.98.3`, `pytest-asyncio`, `ruff`, `mypy`) and verify baseline backend toolchain execution
 - [X] T002 [P] (Thịnh | EC4-10) Configure Vitest, React Testing Library, `@testing-library/jest-dom`, and `jsdom` with `@/*` path alias in `frontend/vitest.config.ts`, `frontend/vitest.setup.ts`, and `frontend/package.json` `devDependencies`
-- [X] T003 (Thịnh | EC4-10) Remove duplicate `"test"` script key in `frontend/package.json` (lines 11–12), keeping `"test": "vitest run"`, and confirm `node_modules` resolves `vitest` and `@vitejs/plugin-react` cleanly (`7` files / `20` tests pass)
+- [X] T003 (Thịnh | EC4-10) Remove duplicate `"test"` script key in `frontend/package.json` (lines 11–12), keeping `"test": "vitest run"`, and confirm `node_modules` resolves `vitest` and `@vitejs/plugin-react` cleanly (`9` files / `35` tests pass)
 
 **Checkpoint**: Backend venv runs all tools cleanly; `T003` unlocks `npm run type-check` and `npm run test` on frontend.
 
@@ -175,7 +175,7 @@ description: "Dependency-ordered TDD task list for EcoBite Feature 003 — Auth,
 ### Frontend (`frontend/`)
 
 - [X] T039 (Thịnh | EC4-10) `npm run lint` — verified zero ESLint warnings or errors
-- [ ] T040 (Thịnh | EC4-10) `npm run type-check`, `npm run test`, and `npm run build` — `npm run type-check` (`0` TS errors) and `npm test` (`7 files / 20 tests`) verified `exit 0` on `2026-11-28`; confirm final `npm run build` after stopping dev server and completing `T030` Vitest suites
+- [X] T040 (Thịnh | EC4-10) `npm run type-check` (`0` TS errors), `npm test` (`9` test files / `35` tests passed), and `npm run build` (`15/15` static pages generated cleanly) — all verified `exit 0` on `2026-11-28` *(additional page-level Store/Admin Vitest tests remain tracked in `T030`)*
 
 ### Repository Hooks (repo root)
 
