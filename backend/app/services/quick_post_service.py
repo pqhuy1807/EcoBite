@@ -11,165 +11,126 @@ malformed output — the app never crashes because of Quick-Post.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any, Protocol, runtime_checkable
+from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import ValidationError
+import google.genai
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import UserPreference
-from app.schemas.nlp import (
-    QuickPostExtractionResponse,
-)
-from app.services.allergen_filter_service import AllergenHardFilterService
+from app.core.config import settings
+from app.schemas.nlp import QuickPostExtractionResponse
 
 logger = logging.getLogger(__name__)
 
+# Exception Domain
+
+
+class QuickPostInputError(ValueError):
+    def __init__(self, message: str, *, status_code: int = 422):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class QuickPostUnavailableError(RuntimeError):
+    pass
+
+
+class QuickPostStoreNotFoundError(LookupError):
+    pass
+
+
+class QuickPostStoreNotApprovedError(PermissionError):
+    pass
+
 
 @runtime_checkable
-class GeminiClient(Protocol):
+class GeminiQuickPostClient(Protocol):
     """Duck-typed Gemini client — only `generate_content` is required."""
 
     async def generate_content(
         self,
         *,
         model: str,
-        contents: str,
+        contents: Any,
         config: Any,
     ) -> Any:  # pragma: no cover - protocol stub
         """Generate content and return an object with `.parsed` (Pydantic model)."""
         ...
 
 
+class GoogleGenAIQuickPostAdapter:
+    """Async adapter wrapping google-genai with a bounded timeout."""
+
+    def __init__(self, api_key: str, timeout_seconds: int | None = None) -> None:
+        self._client = google.genai.Client(api_key=api_key)
+        self._timeout_seconds = (
+            timeout_seconds if timeout_seconds is not None else settings.GEMINI_TIMEOUT_SECONDS
+        )
+
+    async def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+        """Generate content asynchronously without blocking the FastAPI event loop."""
+        return await asyncio.wait_for(
+            self._client.aio.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            ),
+            timeout=self._timeout_seconds,
+        )
+
+
+MAX_PROMPT_MENU_ITEMS = 50
+VN_TZ: tzinfo
+try:
+    VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+except ZoneInfoNotFoundError:
+    VN_TZ = timezone(timedelta(hours=7))
+
+
 class QuickPostService:
-    """Extract structured surplus-dish data from free text via Gemini 2.5 Flash.
-
-    Falls back to an empty (but schema-valid) response when Gemini is
-    unavailable, times out, or returns unparseable output — callers can inspect
-    ``missing_fields_warning`` on each item to surface UX hints.
-    """
-
-    GEMINI_MODEL = "gemini-2.5-flash"
+    """AI Feature 1 service — Batch Quick-Post Multimodal Assistant (WIP)."""
 
     def __init__(
         self,
-        db,
+        db: AsyncSession,
         *,
-        gemini_client: GeminiClient | None = None,
+        gemini_client: GeminiQuickPostClient | None = None,
     ) -> None:
         self.db = db
         self.gemini_client = gemini_client
 
-    # ------------------------------------------------------------------ #
-    # Public API
-    # ------------------------------------------------------------------ #
-
-    async def extract_quick_post(
+    async def parse_dish_nlp(
         self,
-        text_input: str,
-        user_preference: UserPreference | None = None,
-    ) -> dict[str, Any]:
-        """Extract and filter surplus-dish listings from free text.
-
-        Returns a dict compatible with ``QuickPostExtractionResponse`` plus an
-        ``allergen_filter_applied`` flag and ``filtered_out_count``.
-        """
-        extracted = await self._call_gemini(text_input)
-
-        # Apply Allergen Hard Filter (Guardrail #7) — never delegated to AI.
-        excluded = (
-            [str(a) for a in (user_preference.excluded_allergens or [])]
-            if user_preference is not None
-            else []
-        )
-        before = len(extracted.get("items", []))
-        extracted["items"] = AllergenHardFilterService.filter_dishes_by_allergens(
-            extracted.get("items", []),
-            excluded,
-        )
-        extracted["allergen_filter_applied"] = bool(excluded)
-        extracted["filtered_out_count"] = before - len(extracted["items"])
-
-        return extracted
-
-    # ------------------------------------------------------------------ #
-    # Gemini call + fallback
-    # ------------------------------------------------------------------ #
-
-    async def _call_gemini(self, text_input: str) -> dict[str, Any]:
-        """Call Gemini with Structured Output, or return a safe fallback."""
-        if self.gemini_client is None:
-            logger.warning("Quick-Post: no Gemini client configured — using fallback")
-            return self._fallback_response(
-                reason="Gemini client not configured",
-                items=[],
-            )
-
-        try:
-            response = await self.gemini_client.generate_content(
-                model=self.GEMINI_MODEL,
-                contents=self._build_prompt(text_input),
-                config={
-                    "response_mime_type": "application/json",
-                    "response_schema": QuickPostExtractionResponse,
-                },
-            )
-            parsed = getattr(response, "parsed", None)
-            if parsed is None:
-                # Some client versions return `.text` instead of `.parsed`.
-                raw = getattr(response, "text", "") or ""
-                parsed = QuickPostExtractionResponse.model_validate_json(raw)
-
-            if not isinstance(parsed, QuickPostExtractionResponse):
-                raise ValueError("Gemini did not return a QuickPostExtractionResponse")
-
-            return parsed.model_dump()
-
-        except (ValidationError, ValueError) as exc:
-            logger.warning("Quick-Post: Gemini output failed schema validation: %s", exc)
-            return self._fallback_response(
-                reason=f"LLM output validation failed: {exc}",
-                items=[],
-            )
-        except Exception as exc:  # timeout, network, quota, etc.
-            logger.warning("Quick-Post: Gemini call failed (%s) — using fallback", exc)
-            return self._fallback_response(
-                reason=f"LLM unavailable: {exc}",
-                items=[],
-            )
-
-    @staticmethod
-    def _build_prompt(text_input: str) -> str:
-        """Build the extraction prompt fed to Gemini 2.5 Flash."""
-        return (
-            "Bạn là trợ trích xuất thực phẩm dư thừa cho ứng dụng EcoBite. "
-            "Nhập sau đây là mô tả tự do (giọng nói hoặc văn bản) của chủ quán "
-            "về các món ăn còn dư cần mở bán giải cứu.\n"
-            "Hãy trích xuất thành JSON theo schema sau:\n"
-            "- pickup_start, pickup_end: giờ bắt đầu / kết thúc nhận món (HH:MM:SS)\n"
-            "- items: danh sách món ăn, mỗi món có dish_name, quantity, "
-            "original_price (nếu có), override_discounted_price (nếu có), "
-            "side_components, allergens (danh sách {allergen, risk_level, "
-            "source, reason}), dietary_notes, missing_fields_warning\n"
-            'Với allergens: source = "EXPLICIT" nếu chủ quán nói rõ, "INFERRED" '
-            "nếu bạn suy luận từ tri thức món Việt.\n"
-            f'Văn bản đầu vào: """{text_input}"""\n'
-            "Trả về CHỈ JSON, không giải thích thêm."
-        )
-
-    @staticmethod
-    def _fallback_response(*, reason: str, items: list[dict[str, Any]]) -> dict[str, Any]:
-        """Build a schema-valid empty response when Gemini cannot be used."""
-        for item in items:
-            item.setdefault("missing_fields_warning", []).append(reason)
-        return {
-            "pickup_start": "00:00:00",
-            "pickup_end": "23:59:00",
-            "items": items,
-            "allergen_filter_applied": False,
-            "filtered_out_count": 0,
-        }
+        *,
+        owner_id: UUID,
+        raw_text: str | None = None,
+        audio_bytes: bytes | None = None,
+        audio_mime_type: str | None = None,
+        audio_filename: str | None = None,
+        reference_time: datetime | None = None,
+    ) -> QuickPostExtractionResponse:
+        """Extract surplus dishes via Gemini 2.5 Flash (WIP — Chặng 1–4)."""
+        raise NotImplementedError("QuickPostService.parse_dish_nlp is in progress")
 
 
-def build_quick_post_service(db, gemini_client: GeminiClient | None = None) -> QuickPostService:
+def build_quick_post_service(
+    db: AsyncSession,
+    gemini_client: GeminiQuickPostClient | None = None,
+) -> QuickPostService:
     """Factory for ``QuickPostService`` — keeps endpoint layer dependency-free."""
-    return QuickPostService(db, gemini_client=gemini_client)
+    if gemini_client is not None:
+        return QuickPostService(db, gemini_client=gemini_client)
+
+    try:
+        resolved_client: GeminiQuickPostClient | None = GoogleGenAIQuickPostAdapter(
+            api_key=settings.gemini_key,
+            timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
+        )
+    except ValueError:
+        logger.warning("Quick-Post: Gemini API key not configured — running in degraded mode")
+        resolved_client = None
+    return QuickPostService(db, gemini_client=resolved_client)

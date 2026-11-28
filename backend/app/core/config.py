@@ -7,7 +7,7 @@ hard-coded into the source tree (AGENTS.md guardrail #1).
 
 from typing import Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -62,6 +62,15 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
+    # --- Gemini API -----------------------------------------------------------------
+    # Paid-tier API use for demo only
+    GEMINI_DEMO_API: str = ""
+    # Free-tier API for testing
+    GEMINI_TEST_API: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_TIMEOUT_SECONDS: int = Field(default=15, gt=0)
+    # Flag for using demo key
+    GEMINI_USE_DEMO_KEY: bool = False
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -98,6 +107,24 @@ class Settings(BaseSettings):
         if url.startswith("sqlite+aiosqlite"):
             return url.replace("sqlite+aiosqlite", "sqlite", 1)
         return url
+
+    @property
+    def gemini_key(self) -> str:
+        """Return the API key for Gemini."""
+        key = self.GEMINI_DEMO_API if self.GEMINI_USE_DEMO_KEY else self.GEMINI_TEST_API
+        if not key or not key.strip():
+            raise ValueError("Gemini API key must be configured and non-empty")
+        return key.strip()
+
+    @property
+    def gemini_model(self) -> str:
+        """Return the model for Gemini."""
+        return self.GEMINI_MODEL
+
+    @property
+    def gemini_timeout_seconds(self) -> int:
+        """Return the timeout for Gemini."""
+        return self.GEMINI_TIMEOUT_SECONDS
 
 
 settings = Settings()

@@ -27,8 +27,8 @@ warn_redundant_casts = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-# python-jose does not ship type stubs
-module = ["jose.*"]
+# python-jose and google-genai do not ship complete type stubs
+module = ["jose.*", "google.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
