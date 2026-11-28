@@ -2,7 +2,7 @@ import { apiClient } from '@/lib/api-client';
 import type { ReviewCreatePayload, ReviewResponse } from '@/types/api';
 
 export const reviewService = {
-    async createOrderReview(
+    async createReview(
         orderId: string,
         payload: ReviewCreatePayload
     ): Promise<ReviewResponse> {
@@ -13,7 +13,14 @@ export const reviewService = {
         return data;
     },
 
-    async listStoreReviews(
+    async createOrderReview(
+        orderId: string,
+        payload: ReviewCreatePayload
+    ): Promise<ReviewResponse> {
+        return this.createReview(orderId, payload);
+    },
+
+    async getStoreReviews(
         storeId: string,
         skip = 0,
         limit = 20
@@ -23,5 +30,13 @@ export const reviewService = {
             { params: { skip, limit } }
         );
         return data;
+    },
+
+    async listStoreReviews(
+        storeId: string,
+        skip = 0,
+        limit = 20
+    ): Promise<ReviewResponse[]> {
+        return this.getStoreReviews(storeId, skip, limit);
     },
 };

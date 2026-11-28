@@ -381,6 +381,8 @@ export interface ReviewCreatePayload {
     photo_urls?: string[];
 }
 
+export type ReviewCreate = ReviewCreatePayload;
+
 export interface ReviewResponse {
     id: string;
     order_id: string;

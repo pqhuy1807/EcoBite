@@ -15,17 +15,25 @@ export const gamificationService = {
         return data;
     },
 
-    async listAvailableVouchers(): Promise<VoucherResponse[]> {
+    async listVouchers(): Promise<VoucherResponse[]> {
         const { data } = await apiClient.get<VoucherResponse[]>('/vouchers');
         return data;
     },
 
-    async listMyVouchers(skip = 0, limit = 20): Promise<UserVoucherResponse[]> {
+    async listAvailableVouchers(): Promise<VoucherResponse[]> {
+        return this.listVouchers();
+    },
+
+    async getMyVouchers(skip = 0, limit = 20): Promise<UserVoucherResponse[]> {
         const { data } = await apiClient.get<UserVoucherResponse[]>(
             '/vouchers/me',
             { params: { skip, limit } }
         );
         return data;
+    },
+
+    async listMyVouchers(skip = 0, limit = 20): Promise<UserVoucherResponse[]> {
+        return this.getMyVouchers(skip, limit);
     },
 
     async redeemVoucher(voucherId: string): Promise<VoucherRedeemResponse> {
