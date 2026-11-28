@@ -271,3 +271,52 @@ async def test_seed_data_populates_consistent_gamification_records(
         assert huy_summary.total_meals_saved == 7
         assert huy_summary.total_co2_saved_kg == Decimal("17.50")
         assert huy_summary.rank_title == "Chiến Binh Xanh (Eco Hero)"
+
+        # Verify expanded F1-F8 demo seed records (menu catalog, pending VNPay, COD QR, reviews)
+        from app.models.interaction import Review
+        from app.models.menu_item import MenuItem
+        from app.models.order import Order, OrderStatus, PaymentMethod, PaymentStatus
+
+        bui_store = (
+            await session.execute(
+                select(Store).where(Store.name == "Cơm Tấm Bụi Sài Gòn - Hai Bà Trưng")
+            )
+        ).scalar_one()
+        bui_menu_items = (
+            (await session.execute(select(MenuItem).where(MenuItem.store_id == bui_store.id)))
+            .scalars()
+            .all()
+        )
+        assert len(bui_menu_items) >= 5
+
+        an_pending_vnpay = (
+            (
+                await session.execute(
+                    select(Order).where(
+                        Order.consumer_id == an.id,
+                        Order.payment_method == PaymentMethod.VNPAY,
+                        Order.payment_status == PaymentStatus.PENDING,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(an_pending_vnpay) == 1
+
+        bich = (
+            await session.execute(select(User).where(User.email == "consumer.bich@ecobite.vn"))
+        ).scalar_one()
+        bich_orders = (
+            (await session.execute(select(Order).where(Order.consumer_id == bich.id)))
+            .scalars()
+            .all()
+        )
+        assert any(
+            o.payment_method == PaymentMethod.COD and o.status == OrderStatus.CONFIRMED
+            for o in bich_orders
+        )
+        assert any(o.status == OrderStatus.COMPLETED for o in bich_orders)
+
+        reviews = (await session.execute(select(Review))).scalars().all()
+        assert len(reviews) >= 3
