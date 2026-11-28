@@ -43,6 +43,19 @@ export const orderService = {
         return data;
     },
 
+    async getStoreOrders(
+        storeId: string,
+        status?: OrderStatus
+    ): Promise<OrderResponse[]> {
+        const { data } = await apiClient.get<OrderResponse[]>(
+            `/orders/store/${storeId}`,
+            {
+                params: status ? { status } : undefined,
+            }
+        );
+        return data;
+    },
+
     async getOrderDetail(orderId: string): Promise<OrderDetailResponse> {
         const { data } = await apiClient.get<OrderDetailResponse>(
             `/orders/${orderId}`

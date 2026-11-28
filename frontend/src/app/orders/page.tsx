@@ -313,8 +313,8 @@ export default function MyOrdersPage() {
                             type="button"
                             onClick={() => setStatusFilter(tab.key)}
                             className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${statusFilter === tab.key
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                ? 'bg-emerald-600 text-white'
+                                : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                                 }`}
                         >
                             {tab.label}
@@ -357,6 +357,9 @@ export default function MyOrdersPage() {
                             canAct &&
                             order.payment_method === 'VNPAY' &&
                             order.payment_status === 'PENDING';
+                        const canIssueQr =
+                            canAct &&
+                            (order.payment_method === 'COD' || order.payment_status === 'PAID');
                         const isCompleted = order.status === 'COMPLETED';
                         const isReviewed = Boolean(reviewedOrderIds[order.id]);
 
@@ -372,6 +375,9 @@ export default function MyOrdersPage() {
                                             <Badge variant={getPaymentBadgeVariant(order.payment_status)}>
                                                 {order.payment_method} • {order.payment_status}
                                             </Badge>
+                                            {canPayVnpay && (
+                                                <Badge variant="warning">Chờ thanh toán VNPay</Badge>
+                                            )}
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
@@ -426,22 +432,24 @@ export default function MyOrdersPage() {
                                                         }
                                                     >
                                                         <CreditCard className="h-4 w-4" />
-                                                        Thanh toán VNPay
+                                                        Thanh toán VNPay ngay
                                                     </Button>
                                                 )}
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant={canPayVnpay ? 'outline' : 'primary'}
-                                                    onClick={() => issueQrMutation.mutate(order)}
-                                                    isLoading={
-                                                        issueQrMutation.isPending &&
-                                                        issueQrMutation.variables?.id === order.id
-                                                    }
-                                                >
-                                                    <QrCode className="h-4 w-4" />
-                                                    Xem mã QR
-                                                </Button>
+                                                {canIssueQr && (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="primary"
+                                                        onClick={() => issueQrMutation.mutate(order)}
+                                                        isLoading={
+                                                            issueQrMutation.isPending &&
+                                                            issueQrMutation.variables?.id === order.id
+                                                        }
+                                                    >
+                                                        <QrCode className="h-4 w-4" />
+                                                        Xem mã QR
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     type="button"
                                                     variant="outline"
@@ -595,8 +603,8 @@ export default function MyOrdersPage() {
                                         >
                                             <Star
                                                 className={`h-7 w-7 ${star <= reviewRating
-                                                        ? 'fill-amber-400 text-amber-400'
-                                                        : 'text-gray-300'
+                                                    ? 'fill-amber-400 text-amber-400'
+                                                    : 'text-gray-300'
                                                     }`}
                                             />
                                         </button>
@@ -620,8 +628,8 @@ export default function MyOrdersPage() {
                                                 type="button"
                                                 onClick={() => toggleReviewTag(tag)}
                                                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${selected
-                                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 {tag}
