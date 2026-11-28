@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # --- VNPay Payment Gateway Configuration ---------------------------------
     VNP_TMN_CODE: str = ""
     VNP_HASH_SECRET: str = ""
-    VNP_URL: str = ""
+    VNP_URL: str = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
     VNP_RETURN_URL: str = ""
 
     # --- Database (async driver used by the app) ------------------------------

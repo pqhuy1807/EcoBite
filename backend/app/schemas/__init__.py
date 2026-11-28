@@ -56,6 +56,13 @@ from app.schemas.order import (
     QRVerificationResponse,
     VNPayIPNPayload,
 )
+from app.schemas.recommendation import (
+    DishRecommendationItem,
+    PersonalizedRecommendationResponse,
+    SemanticSearchFilter,
+    SemanticSearchRequest,
+    SemanticSearchResponse,
+)
 from app.schemas.store import (
     StoreBase,
     StoreCreate,
@@ -136,4 +143,9 @@ __all__ = [
     "NLPAllergenWarning",
     "SurplusDishItem",
     "QuickPostExtractionResponse",
+    "DishRecommendationItem",
+    "PersonalizedRecommendationResponse",
+    "SemanticSearchFilter",
+    "SemanticSearchRequest",
+    "SemanticSearchResponse",
 ]

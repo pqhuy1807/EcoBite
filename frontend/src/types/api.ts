@@ -319,3 +319,77 @@ export interface QRVerificationResponse {
     message: string;
     order?: OrderResponse | null;
 }
+
+export interface GreenPointsLedgerResponse {
+    id: string;
+    user_id: string;
+    order_id?: string | null;
+    points_change: number;
+    action_type: string;
+    co2_saved_kg: string | number;
+    note?: string | null;
+    balance_after: number;
+    created_at: string;
+}
+
+export interface VoucherResponse {
+    id: string;
+    code: string;
+    title: string;
+    description?: string | null;
+    discount_amount: string | number;
+    points_required: number;
+    min_order_amount: string | number;
+    expires_at: string;
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface UserVoucherResponse {
+    id: string;
+    user_id: string;
+    voucher_id: string;
+    is_used: boolean;
+    used_at?: string | null;
+    claimed_at: string;
+    voucher?: VoucherResponse | null;
+}
+
+export interface GreenPointsSummaryResponse {
+    balance_points: number;
+    total_co2_saved_kg: string | number;
+    total_meals_saved: number;
+    rank_title: string;
+    recent_ledger: GreenPointsLedgerResponse[];
+}
+
+export interface VoucherRedeemResponse {
+    user_voucher_id: string;
+    voucher_id: string;
+    voucher_code: string;
+    title: string;
+    discount_amount: string | number;
+    points_deducted: number;
+    remaining_balance: number;
+    claimed_at: string;
+}
+
+export interface ReviewCreatePayload {
+    rating: number;
+    comment?: string | null;
+    tags?: string[];
+    photo_urls?: string[];
+}
+
+export interface ReviewResponse {
+    id: string;
+    order_id: string;
+    consumer_id: string;
+    store_id: string;
+    dish_id: string;
+    rating: number;
+    comment?: string | null;
+    tags: string[];
+    photo_urls: string[];
+    created_at: string;
+}

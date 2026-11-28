@@ -7,11 +7,13 @@ import {
     Check,
     Clock,
     Copy,
+    CreditCard,
     Leaf,
     MapPin,
     QrCode,
     RefreshCw,
     ShoppingBag,
+    Star,
     Store,
     XCircle,
 } from 'lucide-react';
@@ -25,9 +27,24 @@ import { Toast } from '@/components/ui/Toast';
 import { extractApiErrorMessage } from '@/lib/api-client';
 import { formatDateTime, formatVND } from '@/lib/utils';
 import { orderService } from '@/services/order.service';
-import type { OrderResponse, OrderStatus, QRPayloadResponse } from '@/types/api';
+import { paymentService } from '@/services/payment.service';
+import { reviewService } from '@/services/review.service';
+import type {
+    OrderResponse,
+    OrderStatus,
+    PaymentStatus,
+    QRPayloadResponse,
+} from '@/types/api';
 
 const CONSUMER_ROLES = ['CONSUMER', 'ADMIN'];
+
+const QUICK_REVIEW_TAGS = [
+    'Ngon',
+    'Đúng giờ',
+    'Đóng gói sạch sẽ',
+    'Giá hời',
+    'Phục vụ thân thiện',
+];
 
 const STATUS_TABS: Array<{ key: 'ALL' | OrderStatus; label: string }> = [
     { key: 'ALL', label: 'Tất cả' },
@@ -57,15 +74,39 @@ function getStatusBadge(status: OrderStatus): {
     }
 }
 
+function getPaymentBadgeVariant(
+    status: PaymentStatus
+): 'success' | 'warning' | 'danger' | 'neutral' {
+    switch (status) {
+        case 'PAID':
+            return 'success';
+        case 'PENDING':
+            return 'warning';
+        case 'FAILED':
+            return 'danger';
+        default:
+            return 'neutral';
+    }
+}
+
 export default function MyOrdersPage() {
     const queryClient = useQueryClient();
     const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
     const [qrData, setQrData] = useState<QRPayloadResponse | null>(null);
     const [qrOrder, setQrOrder] = useState<OrderResponse | null>(null);
     const [copied, setCopied] = useState(false);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(
-        null
-    );
+
+    // Review modal state
+    const [reviewOrder, setReviewOrder] = useState<OrderResponse | null>(null);
+    const [reviewRating, setReviewRating] = useState<number>(5);
+    const [reviewComment, setReviewComment] = useState<string>('');
+    const [reviewTags, setReviewTags] = useState<string[]>(['Ngon', 'Đúng giờ']);
+    const [reviewedOrderIds, setReviewedOrderIds] = useState<Record<string, boolean>>({});
+
+    const [toast, setToast] = useState<{
+        message: string;
+        type: 'success' | 'error' | 'info';
+    } | null>(null);
 
     const {
         data: orders = [],
@@ -94,6 +135,26 @@ export default function MyOrdersPage() {
         },
     });
 
+    const vnpayMutation = useMutation({
+        mutationFn: (orderId: string) => paymentService.createVnpayUrl(orderId),
+        onSuccess: (res) => {
+            setToast({
+                message: 'Đang chuyển hướng sang cổng thanh toán VNPay...',
+                type: 'info',
+            });
+            window.location.href = res.payment_url;
+        },
+        onError: (err) => {
+            setToast({
+                message: extractApiErrorMessage(
+                    err,
+                    'Không thể tạo liên kết thanh toán VNPay cho đơn hàng này.'
+                ),
+                type: 'error',
+            });
+        },
+    });
+
     const cancelMutation = useMutation({
         mutationFn: (orderId: string) => orderService.cancelOrder(orderId),
         onSuccess: (updated) => {
@@ -101,8 +162,8 @@ export default function MyOrdersPage() {
                 message: `Đã hủy đơn ${updated.order_code} và hoàn lại tồn kho cho quán.`,
                 type: 'info',
             });
-            queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-            queryClient.invalidateQueries({ queryKey: ['nearby-stores'] });
+            void queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+            void queryClient.invalidateQueries({ queryKey: ['nearby-stores'] });
         },
         onError: (err) => {
             setToast({
@@ -112,14 +173,61 @@ export default function MyOrdersPage() {
         },
     });
 
-    // If navigated with ?highlight=<orderId>, auto-open QR once orders load
+    const reviewMutation = useMutation({
+        mutationFn: ({
+            orderId,
+            rating,
+            comment,
+            tags,
+        }: {
+            orderId: string;
+            rating: number;
+            comment: string | null;
+            tags: string[];
+        }) =>
+            reviewService.createOrderReview(orderId, {
+                rating,
+                comment,
+                tags,
+                photo_urls: [],
+            }),
+        onSuccess: (_res, vars) => {
+            setReviewedOrderIds((prev) => ({ ...prev, [vars.orderId]: true }));
+            setReviewOrder(null);
+            setToast({
+                message: 'Cảm ơn bạn đã gửi đánh giá! Xếp hạng cửa hàng đã được cập nhật.',
+                type: 'success',
+            });
+        },
+        onError: (err, vars) => {
+            const status = (err as { response?: { status?: number } })?.response?.status;
+            if (status === 409) {
+                setReviewedOrderIds((prev) => ({ ...prev, [vars.orderId]: true }));
+                setReviewOrder(null);
+                setToast({
+                    message: 'Bạn đã gửi đánh giá cho đơn hàng này trước đó.',
+                    type: 'info',
+                });
+                return;
+            }
+            setToast({
+                message: extractApiErrorMessage(err, 'Không thể gửi đánh giá cho đơn hàng này.'),
+                type: 'error',
+            });
+        },
+    });
+
     useEffect(() => {
         if (typeof window === 'undefined' || orders.length === 0) return;
         const params = new URLSearchParams(window.location.search);
         const highlightId = params.get('highlight');
         if (!highlightId) return;
         const matched = orders.find((o) => o.id === highlightId);
-        if (matched && (matched.status === 'CONFIRMED' || matched.status === 'READY_FOR_PICKUP')) {
+        if (
+            matched &&
+            (matched.status === 'CONFIRMED' || matched.status === 'READY_FOR_PICKUP') &&
+            (matched.payment_method === 'COD' || matched.payment_status === 'PAID')
+        ) {
             issueQrMutation.mutate(matched);
             window.history.replaceState({}, '', '/orders');
         }
@@ -144,6 +252,30 @@ export default function MyOrdersPage() {
         }
     };
 
+    const openReviewModal = (order: OrderResponse) => {
+        setReviewOrder(order);
+        setReviewRating(5);
+        setReviewComment('');
+        setReviewTags(['Ngon', 'Đúng giờ']);
+    };
+
+    const toggleReviewTag = (tag: string) => {
+        setReviewTags((prev) =>
+            prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
+        );
+    };
+
+    const handleSubmitReview = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!reviewOrder) return;
+        reviewMutation.mutate({
+            orderId: reviewOrder.id,
+            rating: reviewRating,
+            comment: reviewComment.trim() || null,
+            tags: reviewTags,
+        });
+    };
+
     return (
         <AuthGuard allowedRoles={CONSUMER_ROLES}>
             <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -151,7 +283,7 @@ export default function MyOrdersPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Đơn giải cứu của tôi</h1>
                         <p className="mt-1 text-sm text-gray-500">
-                            Xuất trình mã QR động HMAC-SHA256 tại quầy cửa hàng để hoàn tất nhận món.
+                            Thanh toán trực tuyến VNPay, xuất trình mã QR nhận món và đánh giá chất lượng quán.
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -159,7 +291,7 @@ export default function MyOrdersPage() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => refetch()}
+                            onClick={() => void refetch()}
                         >
                             <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
                             Làm mới
@@ -174,18 +306,16 @@ export default function MyOrdersPage() {
                     </div>
                 </div>
 
-                {/* Status Filter Tabs */}
                 <div className="mb-6 flex flex-wrap gap-2">
                     {STATUS_TABS.map((tab) => (
                         <button
                             key={tab.key}
                             type="button"
                             onClick={() => setStatusFilter(tab.key)}
-                            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-                                statusFilter === tab.key
+                            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${statusFilter === tab.key
                                     ? 'bg-emerald-600 text-white'
                                     : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                            }`}
+                                }`}
                         >
                             {tab.label}
                         </button>
@@ -223,6 +353,12 @@ export default function MyOrdersPage() {
                         const badge = getStatusBadge(order.status);
                         const canAct =
                             order.status === 'CONFIRMED' || order.status === 'READY_FOR_PICKUP';
+                        const canPayVnpay =
+                            canAct &&
+                            order.payment_method === 'VNPAY' &&
+                            order.payment_status === 'PENDING';
+                        const isCompleted = order.status === 'COMPLETED';
+                        const isReviewed = Boolean(reviewedOrderIds[order.id]);
 
                         return (
                             <Card key={order.id} className="p-5">
@@ -233,7 +369,7 @@ export default function MyOrdersPage() {
                                                 {order.dish_name ?? 'Suất ăn giải cứu'}
                                             </h2>
                                             <Badge variant={badge.variant}>{badge.label}</Badge>
-                                            <Badge variant="neutral">
+                                            <Badge variant={getPaymentBadgeVariant(order.payment_status)}>
                                                 {order.payment_method} • {order.payment_status}
                                             </Badge>
                                         </div>
@@ -275,36 +411,70 @@ export default function MyOrdersPage() {
                                         </div>
                                     </div>
 
-                                    {canAct && (
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                onClick={() => issueQrMutation.mutate(order)}
-                                                isLoading={
-                                                    issueQrMutation.isPending &&
-                                                    issueQrMutation.variables?.id === order.id
-                                                }
-                                            >
-                                                <QrCode className="h-4 w-4" />
-                                                Xem mã QR
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="border-red-200 text-red-600 hover:bg-red-50"
-                                                onClick={() => cancelMutation.mutate(order.id)}
-                                                isLoading={
-                                                    cancelMutation.isPending &&
-                                                    cancelMutation.variables === order.id
-                                                }
-                                            >
-                                                <XCircle className="h-4 w-4" />
-                                                Hủy đơn
-                                            </Button>
-                                        </div>
-                                    )}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {canAct && (
+                                            <>
+                                                {canPayVnpay && (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        className="bg-blue-600 text-white hover:bg-blue-700"
+                                                        onClick={() => vnpayMutation.mutate(order.id)}
+                                                        isLoading={
+                                                            vnpayMutation.isPending &&
+                                                            vnpayMutation.variables === order.id
+                                                        }
+                                                    >
+                                                        <CreditCard className="h-4 w-4" />
+                                                        Thanh toán VNPay
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant={canPayVnpay ? 'outline' : 'primary'}
+                                                    onClick={() => issueQrMutation.mutate(order)}
+                                                    isLoading={
+                                                        issueQrMutation.isPending &&
+                                                        issueQrMutation.variables?.id === order.id
+                                                    }
+                                                >
+                                                    <QrCode className="h-4 w-4" />
+                                                    Xem mã QR
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="border-red-200 text-red-600 hover:bg-red-50"
+                                                    onClick={() => cancelMutation.mutate(order.id)}
+                                                    isLoading={
+                                                        cancelMutation.isPending &&
+                                                        cancelMutation.variables === order.id
+                                                    }
+                                                >
+                                                    <XCircle className="h-4 w-4" />
+                                                    Hủy đơn
+                                                </Button>
+                                            </>
+                                        )}
+
+                                        {isCompleted &&
+                                            (isReviewed ? (
+                                                <Badge variant="success">Đã đánh giá</Badge>
+                                            ) : (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                                    onClick={() => openReviewModal(order)}
+                                                >
+                                                    <Star className="h-4 w-4" />
+                                                    Đánh giá quán
+                                                </Button>
+                                            ))}
+                                    </div>
                                 </div>
                             </Card>
                         );
@@ -359,7 +529,7 @@ export default function MyOrdersPage() {
                                     </span>
                                     <button
                                         type="button"
-                                        onClick={handleCopyPayload}
+                                        onClick={() => void handleCopyPayload()}
                                         className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
                                     >
                                         {copied ? (
@@ -392,6 +562,110 @@ export default function MyOrdersPage() {
                                 Đóng
                             </Button>
                         </div>
+                    )}
+                </Modal>
+
+                {/* Verified Review Modal */}
+                <Modal
+                    isOpen={Boolean(reviewOrder)}
+                    onClose={() => setReviewOrder(null)}
+                    title={`Đánh giá đơn ${reviewOrder?.order_code ?? ''}`}
+                >
+                    {reviewOrder && (
+                        <form onSubmit={handleSubmitReview} className="space-y-4">
+                            <div className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
+                                <p className="font-semibold text-gray-900">
+                                    {reviewOrder.dish_name ?? 'Suất ăn giải cứu'}
+                                </p>
+                                <p>{reviewOrder.store_name ?? 'Cửa hàng đối tác'}</p>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-xs font-semibold text-gray-700">
+                                    Mức độ hài lòng (1–5 sao)
+                                </p>
+                                <div className="flex items-center gap-1.5">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                            key={star}
+                                            type="button"
+                                            onClick={() => setReviewRating(star)}
+                                            aria-label={`${star} sao`}
+                                            className="rounded-lg p-1 transition-transform hover:scale-110"
+                                        >
+                                            <Star
+                                                className={`h-7 w-7 ${star <= reviewRating
+                                                        ? 'fill-amber-400 text-amber-400'
+                                                        : 'text-gray-300'
+                                                    }`}
+                                            />
+                                        </button>
+                                    ))}
+                                    <span className="ml-2 text-xs font-bold text-amber-700">
+                                        {reviewRating}/5 sao
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-xs font-semibold text-gray-700">
+                                    Nhận xét nhanh
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {QUICK_REVIEW_TAGS.map((tag) => {
+                                        const selected = reviewTags.includes(tag);
+                                        return (
+                                            <button
+                                                key={tag}
+                                                type="button"
+                                                onClick={() => toggleReviewTag(tag)}
+                                                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${selected
+                                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {tag}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label
+                                    htmlFor="review-comment"
+                                    className="mb-1.5 block text-xs font-semibold text-gray-700"
+                                >
+                                    Bình luận thêm (tùy chọn)
+                                </label>
+                                <textarea
+                                    id="review-comment"
+                                    rows={3}
+                                    value={reviewComment}
+                                    onChange={(e) => setReviewComment(e.target.value)}
+                                    placeholder="Chia sẻ trải nghiệm về chất lượng món ăn và thời gian nhận hàng..."
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setReviewOrder(null)}
+                                >
+                                    Hủy
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    isLoading={reviewMutation.isPending}
+                                >
+                                    Gửi đánh giá
+                                </Button>
+                            </div>
+                        </form>
                     )}
                 </Modal>
 

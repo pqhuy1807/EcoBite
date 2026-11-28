@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     orders,
     payments,
     quick_post,
+    recommendations,
     reviews,
     stores,
     users,
@@ -29,3 +30,4 @@ api_router.include_router(orders.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(reviews.router, tags=["Reviews"])
 api_router.include_router(quick_post.router, tags=["quick-post"])
+api_router.include_router(recommendations.router, tags=["recommendations"])

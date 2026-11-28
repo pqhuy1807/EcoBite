@@ -2,7 +2,9 @@
 
 import hashlib
 import hmac
+import urllib.parse
 import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -50,9 +52,14 @@ class TestPaymentServiceHMACSignature:
             assert len(signature) == 128
             assert all(c in "0123456789abcdef" for c in signature)
 
-            # Verify signature matches expected value
+            # Verify signature matches expected value (values URL-encoded with
+            # quote_plus, consistent with PaymentService._generate_vnpay_hash)
             sorted_params = dict(sorted(params.items()))
-            hash_data = "&".join(f"{key}={value}" for key, value in sorted_params.items() if value)
+            hash_data = "&".join(
+                f"{key}={urllib.parse.quote_plus(str(value))}"
+                for key, value in sorted_params.items()
+                if value
+            )
             expected_hash = hmac.new(
                 b"test_secret",
                 hash_data.encode("utf-8"),
@@ -132,6 +139,106 @@ class TestPaymentServiceHMACSignature:
 
             # Verification strips both vnp_SecureHash and vnp_SecureHashType
             assert service._verify_vnpay_ipn_signature(params) is True
+
+    def test_generate_vnpay_hash_url_encodes_special_chars(self) -> None:
+        """Giá trị chứa ký tự đặc biệt phải được quote_plus trước khi ký,
+        và tạo/verify phải dùng chung mã hóa để nhất quán với VNPay."""
+        mock_db = MagicMock()
+        service = PaymentService(mock_db)
+
+        with patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"):
+            # OrderInfo có khoảng trắng, ReturnUrl có :// và ?=&
+            params = {
+                "vnp_TxnRef": "EB20261118",
+                "vnp_Amount": "1000000",
+                "vnp_OrderInfo": "Thanh toan don hang EB20261118",
+                "vnp_ReturnUrl": "http://localhost:3000/payment/return?x=1&y=2",
+                "vnp_IpAddr": "127.0.0.1",
+            }
+
+            signature = service._generate_vnpay_hash(params)
+            params["vnp_SecureHash"] = signature
+
+            # Verify phải dùng cùng quote_plus -> kết quả khớp
+            assert service._verify_vnpay_ipn_signature(params) is True
+
+            # hash_data phải encoded: khoảng trắng -> '+', ':' -> '%3A', v.v.
+            sorted_params = dict(sorted({k: v for k, v in params.items() if k != "vnp_SecureHash"}.items()))
+            hash_data = "&".join(
+                f"{key}={urllib.parse.quote_plus(str(value))}"
+                for key, value in sorted_params.items()
+                if value
+            )
+            assert "Thanh+toan+don+hang+EB20261118" in hash_data
+            assert "http%3A%2F%2Flocalhost%3A3000" in hash_data
+
+    @pytest.mark.asyncio
+    async def test_create_vnpay_payment_url_uses_settings_vnp_url(self) -> None:
+        """payment_url phải bắt đầu bằng settings.VNP_URL (mặc định sandbox)."""
+        mock_db = AsyncMock()
+        service = PaymentService(mock_db)
+
+        mock_order = MagicMock(spec=Order)
+        mock_order.id = uuid.uuid4()
+        mock_order.order_code = "EB20261118"
+        mock_order.total_amount = Decimal("10000.00")
+        mock_order.payment_method = PaymentMethod.VNPAY
+        mock_order.payment_status = PaymentStatus.PENDING
+        mock_order.status = OrderStatus.CONFIRMED
+        mock_order.consumer_id = uuid.uuid4()
+
+        mock_order_repo = MagicMock()
+        mock_order_repo.get_by_id = AsyncMock(return_value=mock_order)
+        service.orders = mock_order_repo
+
+        sandbox_url = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+        with (
+            patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"),
+            patch("app.services.payment_service.settings.VNP_URL", sandbox_url),
+        ):
+            result = await service.create_vnpay_payment_url(
+                order_id=str(mock_order.id),
+                consumer_id=str(mock_order.consumer_id),
+                client_ip="127.0.0.1",
+            )
+
+        assert result["payment_url"].startswith(sandbox_url + "?")
+        assert "vnp_SecureHash=" in result["payment_url"]
+        assert "vnp_CreateDate=" in result["payment_url"]
+
+    @pytest.mark.asyncio
+    async def test_create_vnpay_payment_url_vnp_create_date_vietnam_tz(self) -> None:
+        """vnp_CreateDate phải theo múi giờ Việt Nam (UTC+7), định dạng YYYYMMDDHHMMSS."""
+        mock_db = AsyncMock()
+        service = PaymentService(mock_db)
+
+        mock_order = MagicMock(spec=Order)
+        mock_order.id = uuid.uuid4()
+        mock_order.order_code = "EB20261118"
+        mock_order.total_amount = Decimal("10000.00")
+        mock_order.payment_method = PaymentMethod.VNPAY
+        mock_order.payment_status = PaymentStatus.PENDING
+        mock_order.status = OrderStatus.CONFIRMED
+        mock_order.consumer_id = uuid.uuid4()
+
+        mock_order_repo = MagicMock()
+        mock_order_repo.get_by_id = AsyncMock(return_value=mock_order)
+        service.orders = mock_order_repo
+
+        # 10:30 UTC+7 -> vnp_CreateDate = 20261126103000
+        fixed_now = datetime(2026, 11, 26, 10, 30, 0, tzinfo=timezone(timedelta(hours=7)))
+        with (
+            patch("app.services.payment_service.settings.VNP_HASH_SECRET", "test_secret"),
+            patch("app.services.payment_service.datetime") as mock_datetime,
+        ):
+            mock_datetime.now.return_value = fixed_now
+            result = await service.create_vnpay_payment_url(
+                order_id=str(mock_order.id),
+                consumer_id=str(mock_order.consumer_id),
+                client_ip="127.0.0.1",
+            )
+
+        assert "vnp_CreateDate=20261126103000" in result["payment_url"]
 
 
 # ==============================================================================
