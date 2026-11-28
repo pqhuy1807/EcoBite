@@ -128,6 +128,100 @@ STORE_SEEDS_DATA: list[dict[str, Any]] = [
                     "dietary_notes": ["Ít cay", "Kèm canh rau má"],
                 },
             },
+            {
+                "name": "Bún Thịt Nướng Chả Giò",
+                "description": (
+                    "Bún tươi ăn kèm thịt nướng mật ong, chả giò giòn rụm và đậu phộng rang"
+                ),
+                "category": ItemCategory.NOODLES,
+                "original_price": Decimal("42000.00"),
+                "image_url": "https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?w=600",
+                "standard_ingredients": [
+                    "Bún tươi",
+                    "Thịt heo nướng",
+                    "Chả giò",
+                    "Đậu phộng",
+                    "Nước mắm",
+                ],
+                "base_allergens": ["Peanuts (Đậu phộng)", "Fish (Cá/Nước mắm)", "Gluten"],
+                "dietary_type": DietaryType.NON_VEGAN,
+                "dish": {
+                    "name": "Bún Thịt Nướng Chả Giò (Cả Ngày)",
+                    "description": "Phần bún thịt nướng đầy đủ rau sống, đồ chua và nước mắm riêng",
+                    "rescue_price": Decimal("21000.00"),
+                    "rule_discount_price": Decimal("12600.00"),
+                    "pickup_start_time": time(6, 0),
+                    "pickup_end_time": time(23, 59),
+                    "total_quantity": 10,
+                    "remaining_quantity": 6,
+                    "allergens": [
+                        {
+                            "allergen": "Peanuts (Đậu phộng)",
+                            "risk_level": "HIGH",
+                            "source": "EXPLICIT",
+                            "reason": "Có đậu phộng rang rắc mặt",
+                        },
+                        {
+                            "allergen": "Fish (Cá/Nước mắm)",
+                            "risk_level": "HIGH",
+                            "source": "INFERRED",
+                            "reason": "Nước mắm pha từ cá",
+                        },
+                    ],
+                    "dietary_notes": ["Có đậu phộng", "Có đồ chua"],
+                },
+            },
+            {
+                "name": "Bánh Mì Chảo Bò Trứng",
+                "description": (
+                    "Bánh mì giòn kèm chảo thịt bò mềm, trứng ốp la và patê gan béo ngậy"
+                ),
+                "category": ItemCategory.BAKERY,
+                "original_price": Decimal("48000.00"),
+                "image_url": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600",
+                "standard_ingredients": ["Bột mì", "Thịt bò", "Trứng gà", "Patê gan", "Bơ"],
+                "base_allergens": [
+                    "Cereals containing gluten (Bột mì/Bánh mì)",
+                    "Eggs (Trứng)",
+                    "Milk/Dairy (Sữa)",
+                ],
+                "dietary_type": DietaryType.NON_VEGAN,
+                "dish": {
+                    "name": "Bánh Mì Chảo Bò Trứng (Cả Ngày)",
+                    "description": "Suất bánh mì chảo nóng sốt đóng hộp giấy giữ nhiệt",
+                    "rescue_price": Decimal("24000.00"),
+                    "rule_discount_price": Decimal("14400.00"),
+                    "pickup_start_time": time(6, 0),
+                    "pickup_end_time": time(23, 59),
+                    "total_quantity": 8,
+                    "remaining_quantity": 5,
+                    "allergens": [
+                        {
+                            "allergen": "Cereals containing gluten (Bột mì/Bánh mì)",
+                            "risk_level": "HIGH",
+                            "source": "INFERRED",
+                            "reason": "Ổ bánh mì làm từ bột mì",
+                        },
+                        {
+                            "allergen": "Eggs (Trứng)",
+                            "risk_level": "HIGH",
+                            "source": "EXPLICIT",
+                            "reason": "Có trứng ốp la",
+                        },
+                    ],
+                    "dietary_notes": ["Kèm dưa leo đồ chua"],
+                },
+            },
+            {
+                "name": "Trà Tắc Mật Ong Nhà Làm",
+                "description": "Trà xanh ủ lạnh pha tắc tươi và mật ong hoa nhãn giải nhiệt",
+                "category": ItemCategory.BEVERAGE,
+                "original_price": Decimal("22000.00"),
+                "image_url": "https://images.unsplash.com/photo-1556881286-fc6915169721?w=600",
+                "standard_ingredients": ["Trà xanh", "Tắc tươi", "Mật ong"],
+                "base_allergens": [],
+                "dietary_type": DietaryType.VEGAN,
+            },
         ],
     },
     {
@@ -1343,7 +1437,18 @@ async def seed_data() -> None:
             is_active=True,
         )
 
-        db.add_all([voucher_1, voucher_2, voucher_3, voucher_4])
+        voucher_expired = Voucher(
+            code="ECOEXPIRED",
+            title="Voucher Mùa Hè (Đã Hết Hạn)",
+            description="Mẫu voucher đã quá hạn để kiểm chứng bộ lọc hiển thị voucher khả dụng",
+            discount_amount=Decimal("15000.00"),
+            points_required=150,
+            min_order_amount=Decimal("40000.00"),
+            expires_at=now - timedelta(days=5),
+            is_active=True,
+        )
+
+        db.add_all([voucher_1, voucher_2, voucher_3, voucher_4, voucher_expired])
         await db.flush()
 
         # Người dùng An đã đổi 1 voucher
@@ -1362,6 +1467,10 @@ async def seed_data() -> None:
         if seeded_dishes:
             sample_dish = seeded_dishes[0]
             sample_store = seeded_stores[0]
+            veg_dish = next(
+                (d for d in seeded_dishes if d.dietary_type == DietaryType.VEGAN),
+                sample_dish,
+            )
 
             # Đơn CONFIRMED + QRToken chưa dùng để demo quét QR tại quán
             order_1 = Order(
@@ -1379,6 +1488,38 @@ async def seed_data() -> None:
                 vnpay_pay_date=now - timedelta(minutes=25),
                 vnpay_transaction_no="14567890",
                 vnpay_bank_code="NCB",
+                co2_saved_kg=Decimal("2.50"),
+                green_points_earned=50,
+            )
+            # Đơn VNPAY đang chờ thanh toán (PENDING) để demo nút thanh toán lại & khóa QR ở /orders
+            order_vnpay_pending_an = Order(
+                order_code="EB-20261102-0002",
+                consumer=consumer_1,
+                store=sample_store,
+                dish=sample_dish,
+                quantity=1,
+                unit_price=sample_dish.rescue_price,
+                total_amount=sample_dish.rescue_price,
+                payment_method=PaymentMethod.VNPAY,
+                payment_status=PaymentStatus.PENDING,
+                status=OrderStatus.CONFIRMED,
+                pickup_deadline=datetime.combine(now.date(), sample_dish.pickup_end_time),
+                co2_saved_kg=Decimal("2.50"),
+                green_points_earned=50,
+            )
+            # Đơn COD chờ nhận của Bích (demo quét QR chuyển COD -> PAID & cộng điểm)
+            order_cod_confirmed_bich = Order(
+                order_code="EB-20261102-0003",
+                consumer=consumer_2,
+                store=veg_dish.store,
+                dish=veg_dish,
+                quantity=1,
+                unit_price=veg_dish.rescue_price,
+                total_amount=veg_dish.rescue_price,
+                payment_method=PaymentMethod.COD,
+                payment_status=PaymentStatus.PENDING,
+                status=OrderStatus.CONFIRMED,
+                pickup_deadline=datetime.combine(now.date(), veg_dish.pickup_end_time),
                 co2_saved_kg=Decimal("2.50"),
                 green_points_earned=50,
             )
@@ -1422,10 +1563,57 @@ async def seed_data() -> None:
                 co2_saved_kg=Decimal("17.50"),
                 green_points_earned=350,
             )
-            db.add_all([order_1, order_completed_an, order_completed_huy])
+            # Đơn COMPLETED của Bích (chưa đánh giá -> mở ReviewModal ngay trên /orders)
+            order_completed_bich_unreviewed = Order(
+                order_code="EB-20261101-0003",
+                consumer=consumer_2,
+                store=veg_dish.store,
+                dish=veg_dish,
+                quantity=1,
+                unit_price=veg_dish.rescue_price,
+                total_amount=veg_dish.rescue_price,
+                payment_method=PaymentMethod.COD,
+                payment_status=PaymentStatus.PAID,
+                status=OrderStatus.COMPLETED,
+                pickup_deadline=now - timedelta(days=2, hours=1),
+                completed_at=now - timedelta(days=2),
+                co2_saved_kg=Decimal("2.50"),
+                green_points_earned=50,
+            )
+            # Đơn COMPLETED của Bích (đã đánh giá để làm giàu trang đánh giá quán)
+            order_completed_bich_reviewed = Order(
+                order_code="EB-20261101-0004",
+                consumer=consumer_2,
+                store=veg_dish.store,
+                dish=veg_dish,
+                quantity=1,
+                unit_price=veg_dish.rescue_price,
+                total_amount=veg_dish.rescue_price,
+                payment_method=PaymentMethod.VNPAY,
+                payment_status=PaymentStatus.PAID,
+                status=OrderStatus.COMPLETED,
+                pickup_deadline=now - timedelta(days=3, hours=1),
+                completed_at=now - timedelta(days=3),
+                vnpay_pay_date=now - timedelta(days=3, hours=2),
+                vnpay_transaction_no="14567879",
+                vnpay_bank_code="VNPAYQR",
+                co2_saved_kg=Decimal("2.50"),
+                green_points_earned=40,
+            )
+            db.add_all(
+                [
+                    order_1,
+                    order_vnpay_pending_an,
+                    order_cod_confirmed_bich,
+                    order_completed_an,
+                    order_completed_huy,
+                    order_completed_bich_unreviewed,
+                    order_completed_bich_reviewed,
+                ]
+            )
             await db.flush()
 
-            # Dynamic QR Token (HMAC-SHA256 signature) cho đơn đang chờ lấy
+            # Dynamic QR Token (HMAC-SHA256 signature) cho các đơn đang chờ lấy hợp lệ
             qr_token = QRToken(
                 order=order_1,
                 token_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -1433,7 +1621,14 @@ async def seed_data() -> None:
                 is_used=False,
                 expires_at=now + timedelta(hours=2),
             )
-            db.add(qr_token)
+            qr_token_bich = QRToken(
+                order=order_cod_confirmed_bich,
+                token_hash="7d865e959b2466918c9863afca942d0fb89d7c9ac0c99bafc3749504ded97730",
+                nonce="sample-cryptographic-nonce-bich-02",
+                is_used=False,
+                expires_at=now + timedelta(hours=2),
+            )
+            db.add_all([qr_token, qr_token_bich])
 
             # Payment Transaction (VNPay)
             tx = PaymentTransaction(
@@ -1450,8 +1645,8 @@ async def seed_data() -> None:
             )
             db.add(tx)
 
-            # Verified Review gắn trên đơn đã COMPLETED
-            review = Review(
+            # Verified Reviews gắn trên các đơn đã COMPLETED
+            review_an = Review(
                 order=order_completed_an,
                 consumer=consumer_1,
                 dish=sample_dish,
@@ -1463,9 +1658,27 @@ async def seed_data() -> None:
                 ),
                 tags=["Ngon", "Giá tốt", "Đúng giờ"],
             )
-            db.add(review)
+            review_huy = Review(
+                order=order_completed_huy,
+                consumer=consumer_3,
+                dish=sample_dish,
+                store=sample_store,
+                rating=5,
+                comment="Đặt cho nhóm 7 phần đều đóng hộp sạch sẽ, nhận hàng qua QR siêu nhanh.",
+                tags=["Đóng gói kỹ", "Thân thiện", "Nóng sốt"],
+            )
+            review_bich = Review(
+                order=order_completed_bich_reviewed,
+                consumer=consumer_2,
+                dish=veg_dish,
+                store=veg_dish.store,
+                rating=4,
+                comment="Món chay thanh đạm, không hành tỏi, quán chuẩn bị sẵn rất chu đáo.",
+                tags=["Thanh đạm", "Đúng mô tả"],
+            )
+            db.add_all([review_an, review_huy, review_bich])
 
-            # Green Points Ledger nhất quán với consumer_1.green_points_balance = 180
+            # Green Points Ledger nhất quán với số dư của từng consumer
             ledger_entries = [
                 GreenPointsLedger(
                     user=consumer_1,
@@ -1496,6 +1709,26 @@ async def seed_data() -> None:
                     co2_saved_kg=Decimal("5.00"),
                     note="Cộng 100 Điểm Xanh giải cứu 2 suất Cơm Sườn Bì Chả",
                     created_at=now - timedelta(days=1),
+                ),
+                GreenPointsLedger(
+                    user=consumer_2,
+                    order=order_completed_bich_reviewed,
+                    points_change=40,
+                    balance_after=40,
+                    action_type=PointActionType.ORDER_RESCUE,
+                    co2_saved_kg=Decimal("2.50"),
+                    note="Cộng 40 Điểm Xanh giải cứu 1 suất món chay",
+                    created_at=now - timedelta(days=3),
+                ),
+                GreenPointsLedger(
+                    user=consumer_2,
+                    order=order_completed_bich_unreviewed,
+                    points_change=50,
+                    balance_after=90,
+                    action_type=PointActionType.ORDER_RESCUE,
+                    co2_saved_kg=Decimal("2.50"),
+                    note="Cộng 50 Điểm Xanh giải cứu 1 suất món chay",
+                    created_at=now - timedelta(days=2),
                 ),
                 GreenPointsLedger(
                     user=consumer_3,
